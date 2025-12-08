@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: keyrunes-postgres
+    environment:
+      POSTGRES_DB: keyrunes
+      POSTGRES_USER: keyrunes
+      POSTGRES_PASSWORD: keyrunes_dev_password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keyrunes"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - keyrunes-network
+
+  keyrunes:
+    image: jonatasoli/keyrunes:latest
+    container_name: keyrunes-server
+    network_mode: host
+    environment:
+      DATABASE_URL: postgres://keyrunes:keyrunes_dev_password@127.0.0.1:5432/keyrunes
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 3000
+      PORT: 3000
+      ROCKET_ADDRESS: 0.0.0.0
+      ROCKET_PORT: 3000
+      ADMIN_PORT: 8081
+      JWT_SECRET: dev_jwt_secret_change_in_production
+      JWT_EXPIRATION: 3600
+      ADMIN_KEY: dev_admin_key_change_in_production
+      RUST_LOG: info,keyrunes=debug
+      CORS_ALLOW_ORIGIN: "*"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  keyrunes-network:
+    driver: bridge
