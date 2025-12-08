@@ -1,7 +1,7 @@
 """Decorators for Keyrunes authorization."""
 
 from functools import wraps
-from typing import Callable, Any, Optional
+from typing import Any, Callable, Optional
 
 from keyrunes_sdk.client import KeyrunesClient
 from keyrunes_sdk.exceptions import AuthorizationError, UserNotFoundError
@@ -27,12 +27,14 @@ def _get_client(
         return client
 
     if "client" in kwargs:
-        return kwargs["client"]
+        client_from_kwargs = kwargs["client"]
+        if isinstance(client_from_kwargs, KeyrunesClient):
+            return client_from_kwargs
 
     from keyrunes_sdk.config import get_global_client
 
     global_client = get_global_client()
-    if global_client:
+    if global_client is not None:
         return global_client
 
     raise ValueError(

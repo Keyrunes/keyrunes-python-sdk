@@ -1,7 +1,7 @@
 """Global configuration and client management for Keyrunes SDK."""
 
-from typing import Optional
 from threading import Lock
+from typing import Optional
 
 from keyrunes_sdk.client import KeyrunesClient
 

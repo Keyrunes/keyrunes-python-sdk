@@ -14,19 +14,18 @@ import sys
 import time
 from typing import Optional
 
-from keyrunes_sdk import (
-    KeyrunesClient,
-    require_group,
-    require_admin,
-    AuthenticationError,
-    AuthorizationError,
-)
 from examples.test_objects import (
-    user_registration_payload,
     admin_registration_payload,
     login_payload,
+    user_registration_payload,
 )
-
+from keyrunes_sdk import (
+    AuthenticationError,
+    AuthorizationError,
+    KeyrunesClient,
+    require_admin,
+    require_group,
+)
 
 KEYRUNES_URL = os.getenv("KEYRUNES_BASE_URL", "http://localhost:3000")
 ADMIN_KEY = os.getenv("ADMIN_KEY", "dev_admin_key_change_in_production")
@@ -56,8 +55,9 @@ def print_info(message: str) -> None:
 
 def wait_for_keyrunes(url: str, timeout: int = 30) -> bool:
     """Wait for Keyrunes to be available."""
-    import httpx
     from urllib.parse import urljoin
+
+    import httpx
 
     health_url = urljoin(url.rstrip("/") + "/", "api/health")
     print_info(f"Waiting for Keyrunes health at {health_url}...")
@@ -103,7 +103,9 @@ def test_user_login(client: KeyrunesClient, user_data: dict) -> bool:
     print_section("Test 2: User Login")
 
     try:
-        login_data = login_payload(email=user_data["email"], password=user_data["password"])
+        login_data = login_payload(
+            email=user_data["email"], password=user_data["password"]
+        )
         token = client.login(login_data["identity"], login_data["password"])
 
         print_success("Login successful!")
@@ -201,7 +203,9 @@ def test_decorator_require_group(client: KeyrunesClient, user_id: str) -> None:
         print_success("Decorator correctly blocked access (user is not admin)")
 
 
-def test_decorator_require_admin(client: KeyrunesClient, admin_id: str, user_id: str) -> None:
+def test_decorator_require_admin(
+    client: KeyrunesClient, admin_id: str, user_id: str
+) -> None:
     """Test @require_admin decorator."""
     print_section("Test 7: Decorator @require_admin")
 
@@ -241,7 +245,9 @@ def test_context_manager(user_data: dict) -> None:
     print_section("Test 9: Context Manager")
 
     try:
-        login_data = login_payload(email=user_data["email"], password=user_data["password"])
+        login_data = login_payload(
+            email=user_data["email"], password=user_data["password"]
+        )
         with KeyrunesClient(base_url=KEYRUNES_URL) as client:
             token = client.login(login_data["identity"], login_data["password"])
             print_success("Context manager working correctly")
@@ -282,15 +288,23 @@ def main() -> int:
     admin_id, admin_data = admin_result
 
     admin_client = KeyrunesClient(base_url=KEYRUNES_URL)
-    admin_login_data = login_payload(email=admin_data["email"], password=admin_data["password"])
-    admin_client.login(admin_login_data["identity"], admin_login_data["password"])
-    
+    admin_login_data = login_payload(
+        email=admin_data["email"], password=admin_data["password"]
+    )
+    admin_client.login(
+        admin_login_data["identity"], admin_login_data["password"]
+    )
+
     if admin_client._token_data:
         admin_groups = admin_client._token_data.get("groups", [])
         if "superadmin" not in admin_groups:
-            print_info("Note: Admin may need to be manually added to superadmin group in database.")
+            print_info(
+                "Note: Admin may need to be manually added to superadmin group in database."
+            )
             print_info("For testing, you can run:")
-            print_info(f"  docker-compose exec -T postgres psql -U keyrunes -d keyrunes -c \"INSERT INTO user_groups (user_id, group_id) SELECT {admin_id}, group_id FROM groups WHERE name = 'superadmin' ON CONFLICT DO NOTHING;\"")
+            print_info(
+                f"  docker-compose exec -T postgres psql -U keyrunes -d keyrunes -c \"INSERT INTO user_groups (user_id, group_id) SELECT {admin_id}, group_id FROM groups WHERE name = 'superadmin' ON CONFLICT DO NOTHING;\""
+            )
             print_info("Then login again to refresh the token.")
 
     test_get_current_user(client)

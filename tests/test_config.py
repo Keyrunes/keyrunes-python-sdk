@@ -1,16 +1,16 @@
 """Tests for Keyrunes SDK global configuration."""
 
-import pytest
 from unittest.mock import MagicMock
 
-from keyrunes_sdk.config import (
-    configure,
-    get_global_client,
-    clear_global_client,
-    get_config,
-    _GlobalConfig,
-)
+import pytest
+
 from keyrunes_sdk.client import KeyrunesClient
+from keyrunes_sdk.config import (
+    clear_global_client,
+    configure,
+    get_config,
+    get_global_client,
+)
 
 
 class TestGlobalConfig:
@@ -114,7 +114,9 @@ class TestGlobalConfigIntegrationWithDecorators:
         """Teardown after each test."""
         clear_global_client()
 
-    def test_decorator_uses_global_client(self, base_url: str, sample_user) -> None:
+    def test_decorator_uses_global_client(
+        self, base_url: str, sample_user
+    ) -> None:
         """Test that decorators can use global client."""
         from keyrunes_sdk.decorators import require_group
 
@@ -144,7 +146,7 @@ class TestGlobalConfigIntegrationWithDecorators:
         def admin_function(user_id: str) -> str:
             return f"Admin action for {user_id}"
 
-        result = admin_function(user_id="user123")
+        admin_function(user_id="user123")
 
         explicit_client.has_group.assert_called_once()
         global_client.has_group.assert_not_called()
@@ -152,7 +154,6 @@ class TestGlobalConfigIntegrationWithDecorators:
     def test_decorator_with_no_client_fails(self) -> None:
         """Test that decorator fails when no client is available."""
         from keyrunes_sdk.decorators import require_group
-        from keyrunes_sdk.exceptions import AuthorizationError
 
         @require_group("admins")
         def admin_function(user_id: str) -> str:

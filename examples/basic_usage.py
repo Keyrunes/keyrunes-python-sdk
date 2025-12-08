@@ -7,7 +7,7 @@ This example shows how to use the main library features.
 
 import sys
 
-from keyrunes_sdk import KeyrunesClient, require_group, require_admin
+from keyrunes_sdk import KeyrunesClient, require_admin, require_group
 
 
 def main():

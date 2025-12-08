@@ -1,21 +1,19 @@
 """Factory Boy factories for testing."""
 
 from datetime import datetime
-from typing import Any
 
 import factory
 from factory import Faker, LazyAttribute
 from faker import Faker as FakerInstance
 
 from keyrunes_sdk.models import (
-    User,
-    Group,
-    Token,
-    UserRegistration,
     AdminRegistration,
+    Group,
     GroupCheck,
+    Token,
+    User,
+    UserRegistration,
 )
-
 
 fake_instance = FakerInstance()
 
@@ -64,7 +62,10 @@ class TokenFactory(factory.Factory):
         model = Token
 
     access_token = LazyAttribute(
-        lambda _: f"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.{fake_instance.sha256()[:50]}"
+        lambda _: (
+            f"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+            f"{fake_instance.sha256()[:50]}"
+        )
     )
     token_type = "bearer"
     expires_in = 3600

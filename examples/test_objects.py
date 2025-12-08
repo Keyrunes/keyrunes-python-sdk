@@ -13,7 +13,9 @@ def _random_password(length: int = 12) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-def user_registration_payload(suffix: str | None = None, password: str | None = None) -> dict:
+def user_registration_payload(
+    suffix: str | None = None, password: str | None = None
+) -> dict:
     tag = _suffix(suffix)
     return {
         "username": f"user_{tag}",
@@ -25,16 +27,17 @@ def user_registration_payload(suffix: str | None = None, password: str | None = 
 
 
 def admin_registration_payload(
-    suffix: str | None = None, admin_key: str | None = None, password: str | None = None
+    suffix: str | None = None,
+    admin_key: str | None = None,
+    password: str | None = None,
 ) -> dict:
     tag = _suffix(suffix)
     return {
         "username": f"admin_{tag}",
         "email": f"admin_{tag}@example.com",
         "password": password or _random_password(),
-        "admin_key": admin_key or os.getenv(
-            "ADMIN_KEY", "dev_admin_key_change_in_production"
-        ),
+        "admin_key": admin_key
+        or os.getenv("ADMIN_KEY", "dev_admin_key_change_in_production"),
     }
 
 

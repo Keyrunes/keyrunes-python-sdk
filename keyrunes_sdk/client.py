@@ -1,24 +1,25 @@
 """Keyrunes API Client."""
 
-from typing import Optional, Dict, Any, List
-import httpx
+from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
+
+import httpx
 import jwt
 
-from keyrunes_sdk.models import (
-    User,
-    Token,
-    UserRegistration,
-    AdminRegistration,
-    LoginCredentials,
-    GroupCheck,
-)
 from keyrunes_sdk.exceptions import (
     AuthenticationError,
     AuthorizationError,
     GroupNotFoundError,
-    UserNotFoundError,
     NetworkError,
+    UserNotFoundError,
+)
+from keyrunes_sdk.models import (
+    AdminRegistration,
+    GroupCheck,
+    LoginCredentials,
+    Token,
+    User,
+    UserRegistration,
 )
 
 
@@ -123,7 +124,8 @@ class KeyrunesClient:
                     )
                 raise NetworkError(f"Request failed: {error_msg}")
 
-            return response.json()
+            result: Dict[str, Any] = response.json()
+            return result
 
         except httpx.RequestError as e:
             raise NetworkError(f"Network request failed: {str(e)}")
@@ -136,9 +138,7 @@ class KeyrunesClient:
 
         normalized: Dict[str, Any] = {}
         normalized["id"] = str(
-            data.get("id")
-            or data.get("user_id")
-            or data.get("external_id")
+            data.get("id") or data.get("user_id") or data.get("external_id")
         )
         normalized["username"] = data.get("username", "")
         normalized["email"] = data.get("email", "")
@@ -361,16 +361,12 @@ class KeyrunesClient:
             raise AuthenticationError("Not authenticated. Please login first.")
 
         token_user_id = (
-            str(self._token_data.get("sub", ""))
-            if self._token_data
-            else None
+            str(self._token_data.get("sub", "")) if self._token_data else None
         )
 
         if token_user_id and str(user_id) == token_user_id:
             groups = (
-                self._token_data.get("groups", [])
-                if self._token_data
-                else []
+                self._token_data.get("groups", []) if self._token_data else []
             )
             return group_id in groups
 
@@ -417,17 +413,16 @@ class KeyrunesClient:
             raise AuthenticationError("Not authenticated. Please login first.")
 
         token_user_id = (
-            str(self._token_data.get("sub", ""))
-            if self._token_data
-            else None
+            str(self._token_data.get("sub", "")) if self._token_data else None
         )
 
-        if token_user_id and str(user_id) == token_user_id:
+        if token_user_id and str(user_id) == token_user_id and self._token_data:
+            token_data = self._token_data
             user_data = {
-                "id": str(self._token_data.get("sub", "")),
-                "username": self._token_data.get("username", ""),
-                "email": self._token_data.get("email", ""),
-                "groups": self._token_data.get("groups", []),
+                "id": str(token_data.get("sub", "")),
+                "username": token_data.get("username", ""),
+                "email": token_data.get("email", ""),
+                "groups": token_data.get("groups", []),
             }
             return self._normalize_user(user_data)
 
@@ -435,12 +430,17 @@ class KeyrunesClient:
             response = self._make_request("GET", f"/api/users/{user_id}")
             return self._normalize_user(response)
         except UserNotFoundError:
-            if token_user_id and str(user_id) == token_user_id:
+            if (
+                token_user_id
+                and str(user_id) == token_user_id
+                and self._token_data
+            ):
+                token_data = self._token_data
                 user_data = {
-                    "id": str(self._token_data.get("sub", "")),
-                    "username": self._token_data.get("username", ""),
-                    "email": self._token_data.get("email", ""),
-                    "groups": self._token_data.get("groups", []),
+                    "id": str(token_data.get("sub", "")),
+                    "username": token_data.get("username", ""),
+                    "email": token_data.get("email", ""),
+                    "groups": token_data.get("groups", []),
                 }
                 return self._normalize_user(user_data)
             raise
@@ -465,11 +465,12 @@ class KeyrunesClient:
             raise AuthenticationError("Not authenticated. Please login first.")
 
         if self._token_data:
+            token_data = self._token_data
             user_data = {
-                "id": str(self._token_data.get("sub", "")),
-                "username": self._token_data.get("username", ""),
-                "email": self._token_data.get("email", ""),
-                "groups": self._token_data.get("groups", []),
+                "id": str(token_data.get("sub", "")),
+                "username": token_data.get("username", ""),
+                "email": token_data.get("email", ""),
+                "groups": token_data.get("groups", []),
             }
             return self._normalize_user(user_data)
 
@@ -478,11 +479,12 @@ class KeyrunesClient:
             return self._normalize_user(response)
         except UserNotFoundError:
             if self._token_data:
+                token_data = self._token_data
                 user_data = {
-                    "id": str(self._token_data.get("sub", "")),
-                    "username": self._token_data.get("username", ""),
-                    "email": self._token_data.get("email", ""),
-                    "groups": self._token_data.get("groups", []),
+                    "id": str(token_data.get("sub", "")),
+                    "username": token_data.get("username", ""),
+                    "email": token_data.get("email", ""),
+                    "groups": token_data.get("groups", []),
                 }
                 return self._normalize_user(user_data)
             raise

@@ -6,8 +6,12 @@ This example shows how to configure the client once and use decorators
 without needing to pass the client in every function.
 """
 
-from keyrunes_sdk import configure, require_group, require_admin, get_global_client
-
+from keyrunes_sdk import (
+    configure,
+    get_global_client,
+    require_admin,
+    require_group,
+)
 
 print("[INFO] Configuring Keyrunes SDK...")
 client = configure(base_url="http://localhost:3000")
@@ -173,5 +177,7 @@ if __name__ == "__main__":
         print()
         print("Make sure that:")
         print("  1. Keyrunes is running: docker-compose up -d")
-        print("  2. Admin was registered: poetry run python examples/test_local.py")
+        print(
+            "  2. Admin was registered: poetry run python examples/test_local.py"
+        )
         sys.exit(1)

@@ -44,13 +44,13 @@ jobs:
       run: poetry install --no-interaction
     
     - name: Run linting
-      run: poetry run flake8 keyrunes_sdk tests
+      run: poetry run task lint
     
     - name: Run type checking
-      run: poetry run mypy keyrunes_sdk
+      run: poetry run task type-check
     
-    - name: Run tests
-      run: poetry run pytest tests/ -v --cov=keyrunes_sdk --cov-report=xml --cov-report=term
+    - name: Run tests with coverage
+      run: poetry run task cov
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4

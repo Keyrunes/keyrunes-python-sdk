@@ -1,12 +1,12 @@
 """Tests for Keyrunes SDK decorators."""
 
-import pytest
 from unittest.mock import MagicMock
 
-from keyrunes_sdk.decorators import require_group, require_admin
+import pytest
+
+from keyrunes_sdk.decorators import require_admin, require_group
 from keyrunes_sdk.exceptions import AuthorizationError
-from keyrunes_sdk.models import User
-from tests.factories import UserFactory, AdminUserFactory
+from tests.factories import AdminUserFactory, UserFactory
 
 
 class TestRequireGroupDecorator:
@@ -36,13 +36,19 @@ class TestRequireGroupDecorator:
         with pytest.raises(AuthorizationError) as exc_info:
             admin_function(user_id="user123")
 
-        assert "does not belong to any of the required groups" in str(exc_info.value)
+        assert "does not belong to any of the required groups" in str(
+            exc_info.value
+        )
 
     def test_require_group_multiple_groups_any(self, mock_client) -> None:
         """Test decorator with multiple groups (ANY match)."""
-        mock_client.has_group = MagicMock(side_effect=lambda uid, gid: gid == "moderators")
+        mock_client.has_group = MagicMock(
+            side_effect=lambda uid, gid: gid == "moderators"
+        )
 
-        @require_group("admins", "moderators", client=mock_client, all_groups=False)
+        @require_group(
+            "admins", "moderators", client=mock_client, all_groups=False
+        )
         def moderate_function(user_id: str) -> str:
             return f"Moderate action for {user_id}"
 
@@ -54,7 +60,9 @@ class TestRequireGroupDecorator:
         """Test decorator with multiple groups (ALL required)."""
         mock_client.has_group = MagicMock(return_value=True)
 
-        @require_group("admins", "verified", client=mock_client, all_groups=True)
+        @require_group(
+            "admins", "verified", client=mock_client, all_groups=True
+        )
         def sensitive_function(user_id: str) -> str:
             return f"Sensitive action for {user_id}"
 
@@ -63,11 +71,17 @@ class TestRequireGroupDecorator:
         assert result == "Sensitive action for user123"
         assert mock_client.has_group.call_count == 2
 
-    def test_require_group_multiple_groups_all_missing_one(self, mock_client) -> None:
+    def test_require_group_multiple_groups_all_missing_one(
+        self, mock_client
+    ) -> None:
         """Test decorator with ALL groups required but user missing one."""
-        mock_client.has_group = MagicMock(side_effect=lambda uid, gid: gid == "admins")
+        mock_client.has_group = MagicMock(
+            side_effect=lambda uid, gid: gid == "admins"
+        )
 
-        @require_group("admins", "verified", client=mock_client, all_groups=True)
+        @require_group(
+            "admins", "verified", client=mock_client, all_groups=True
+        )
         def sensitive_function(user_id: str) -> str:
             return f"Sensitive action for {user_id}"
 
@@ -116,7 +130,9 @@ class TestRequireGroupDecorator:
         """Test decorator with custom user_id parameter name."""
         mock_client.has_group = MagicMock(return_value=True)
 
-        @require_group("admins", client=mock_client, user_id_param="target_user")
+        @require_group(
+            "admins", client=mock_client, user_id_param="target_user"
+        )
         def admin_function(target_user: str) -> str:
             return f"Admin action for {target_user}"
 

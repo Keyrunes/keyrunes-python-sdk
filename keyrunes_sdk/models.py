@@ -1,9 +1,9 @@
 """Data models for Keyrunes SDK."""
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class User(BaseModel):
@@ -35,9 +35,7 @@ class Group(BaseModel):
 
     id: str = Field(..., description="Group ID")
     name: str = Field(..., description="Group name")
-    description: Optional[str] = Field(
-        None, description="Group description"
-    )
+    description: Optional[str] = Field(None, description="Group description")
     permissions: List[str] = Field(
         default_factory=list, description="List of permissions"
     )
@@ -54,9 +52,7 @@ class Token(BaseModel):
     expires_in: Optional[int] = Field(
         None, description="Token expiration in seconds"
     )
-    refresh_token: Optional[str] = Field(
-        None, description="Refresh token"
-    )
+    refresh_token: Optional[str] = Field(None, description="Refresh token")
     user: Optional[User] = Field(None, description="User information")
 
 

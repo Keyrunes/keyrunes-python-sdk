@@ -4,20 +4,19 @@ import pytest
 from pydantic import ValidationError
 
 from keyrunes_sdk.models import (
-    User,
-    Group,
-    Token,
-    UserRegistration,
     AdminRegistration,
-    LoginCredentials,
     GroupCheck,
+    LoginCredentials,
+    Token,
+    User,
+    UserRegistration,
 )
 from tests.factories import (
-    UserFactory,
+    AdminRegistrationFactory,
     GroupFactory,
     TokenFactory,
+    UserFactory,
     UserRegistrationFactory,
-    AdminRegistrationFactory,
 )
 
 

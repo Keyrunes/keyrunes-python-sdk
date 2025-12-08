@@ -1,12 +1,12 @@
 """Pytest configuration and fixtures."""
 
+from unittest.mock import MagicMock, Mock
+
 import pytest
-from unittest.mock import Mock, MagicMock
 from faker import Faker
 
 from keyrunes_sdk.client import KeyrunesClient
-from keyrunes_sdk.models import User, Token
-
+from keyrunes_sdk.models import Token, User
 
 fake = Faker()
 
@@ -27,7 +27,7 @@ def api_key() -> str:
 def mock_client(base_url: str, api_key: str) -> KeyrunesClient:
     """Return mocked Keyrunes client."""
     client = KeyrunesClient(base_url=base_url, api_key=api_key)
-    client._make_request = MagicMock()  #setup
+    client._make_request = MagicMock()  # setup
     return client
 
 

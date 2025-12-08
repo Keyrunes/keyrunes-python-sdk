@@ -1,19 +1,18 @@
 """Tests for Keyrunes SDK client."""
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+
 import httpx
+import pytest
 
 from keyrunes_sdk.client import KeyrunesClient
-from keyrunes_sdk.models import User, Token
 from keyrunes_sdk.exceptions import (
     AuthenticationError,
     AuthorizationError,
-    UserNotFoundError,
-    GroupNotFoundError,
     NetworkError,
+    UserNotFoundError,
 )
-from tests.factories import UserFactory, TokenFactory
+from keyrunes_sdk.models import Token, User
 
 
 class TestKeyrunesClient:
@@ -176,7 +175,9 @@ class TestClientUserManagement:
         sample_user: User,
     ) -> None:
         """Test successful user registration."""
-        mock_client._make_request.return_value = {"user": sample_user.model_dump()}
+        mock_client._make_request.return_value = {
+            "user": sample_user.model_dump()
+        }
 
         user = mock_client.register_user(
             username="newuser",
@@ -194,7 +195,9 @@ class TestClientUserManagement:
         sample_user: User,
     ) -> None:
         """Test user registration with attributes."""
-        mock_client._make_request.return_value = {"user": sample_user.model_dump()}
+        mock_client._make_request.return_value = {
+            "user": sample_user.model_dump()
+        }
 
         user = mock_client.register_user(
             username="newuser",
@@ -213,7 +216,9 @@ class TestClientUserManagement:
         sample_admin: User,
     ) -> None:
         """Test successful admin registration."""
-        mock_client._make_request.return_value = {"user": sample_admin.model_dump()}
+        mock_client._make_request.return_value = {
+            "user": sample_admin.model_dump()
+        }
 
         admin = mock_client.register_admin(
             username="adminuser",
@@ -238,7 +243,11 @@ class TestClientUserManagement:
             }
         )
 
-        user = client.register_user(username="testuser", email="testuser@example.com", password="pass12345")
+        user = client.register_user(
+            username="testuser",
+            email="testuser@example.com",
+            password="pass12345",
+        )
 
         assert isinstance(user, User)
         assert user.id == "1"
@@ -274,7 +283,12 @@ class TestClientUserManagement:
     ) -> None:
         """Test getting user by ID."""
         mock_client._token = "test-token"
-        mock_client._token_data = {"sub": "user123", "username": "testuser", "email": "testuser@example.com", "groups": []}
+        mock_client._token_data = {
+            "sub": "user123",
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "groups": [],
+        }
         mock_client._make_request.return_value = sample_user.model_dump()
 
         user = mock_client.get_user("user123")
@@ -316,7 +330,9 @@ class TestClientUserManagement:
         assert user.id == "ext-1"
         assert user.is_admin is True
 
-    def test_parse_token_response_token_key(self, base_url: str, sample_user: User) -> None:
+    def test_parse_token_response_token_key(
+        self, base_url: str, sample_user: User
+    ) -> None:
         client = KeyrunesClient(base_url=base_url)
         payload = {
             "token": "abc",
@@ -334,7 +350,9 @@ class TestClientUserManagement:
         assert token.user is not None
         assert token.user.id == sample_user.id
 
-    def test_parse_token_response_access_token(self, base_url: str, sample_user: User) -> None:
+    def test_parse_token_response_access_token(
+        self, base_url: str, sample_user: User
+    ) -> None:
         client = KeyrunesClient(base_url=base_url)
         payload = {
             "access_token": "xyz",
@@ -360,7 +378,12 @@ class TestClientGroupManagement:
     def test_has_group_true(self, mock_client: KeyrunesClient) -> None:
         """Test checking group membership - user has group."""
         mock_client._token = "test-token"
-        mock_client._token_data = {"sub": "user123", "username": "testuser", "email": "testuser@example.com", "groups": ["admins"]}
+        mock_client._token_data = {
+            "sub": "user123",
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "groups": ["admins"],
+        }
         mock_client._make_request.return_value = {
             "user_id": "user123",
             "group_id": "admins",
@@ -374,7 +397,12 @@ class TestClientGroupManagement:
     def test_has_group_false(self, mock_client: KeyrunesClient) -> None:
         """Test checking group membership - user doesn't have group."""
         mock_client._token = "test-token"
-        mock_client._token_data = {"sub": "user123", "username": "testuser", "email": "testuser@example.com", "groups": []}
+        mock_client._token_data = {
+            "sub": "user123",
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "groups": [],
+        }
         mock_client._make_request.return_value = {
             "user_id": "user123",
             "group_id": "admins",
@@ -388,7 +416,12 @@ class TestClientGroupManagement:
     def test_has_group_not_found(self, mock_client: KeyrunesClient) -> None:
         """Test checking non-existent group."""
         mock_client._token = "test-token"
-        mock_client._token_data = {"sub": "user123", "username": "testuser", "email": "testuser@example.com", "groups": []}
+        mock_client._token_data = {
+            "sub": "user123",
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "groups": [],
+        }
         mock_client._make_request.side_effect = UserNotFoundError("Not found")
 
         result = mock_client.has_group("user123", "nonexistent")
@@ -401,7 +434,12 @@ class TestClientGroupManagement:
     ) -> None:
         """Test getting user groups."""
         mock_client._token = "test-token"
-        mock_client._token_data = {"sub": "user123", "username": "testuser", "email": "testuser@example.com", "groups": sample_user.groups}
+        mock_client._token_data = {
+            "sub": "user123",
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "groups": sample_user.groups,
+        }
         mock_client._make_request.return_value = sample_user.model_dump()
 
         groups = mock_client.get_user_groups("user123")
@@ -416,7 +454,12 @@ class TestClientGroupManagement:
     ) -> None:
         """Test getting current user's groups."""
         mock_client._token = "test-token"
-        mock_client._token_data = {"sub": "user123", "username": "testuser", "email": "testuser@example.com", "groups": sample_user.groups}
+        mock_client._token_data = {
+            "sub": "user123",
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "groups": sample_user.groups,
+        }
 
         groups = mock_client.get_user_groups()
 
@@ -427,7 +470,9 @@ class TestClientGroupManagement:
 class TestClientEdgeCases:
     """Tests for edge cases and error handling."""
 
-    def test_login_with_empty_credentials(self, mock_client: KeyrunesClient) -> None:
+    def test_login_with_empty_credentials(
+        self, mock_client: KeyrunesClient
+    ) -> None:
         """Test login with empty credentials."""
         with pytest.raises(Exception):
             mock_client.login("", "")

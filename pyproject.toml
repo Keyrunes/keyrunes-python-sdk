@@ -65,12 +65,12 @@ addopts = [
 ]
 
 [tool.black]
-line-length = 100
-target-version = ['py314']
+line-length = 80
+target-version = ['py312']
 
 [tool.isort]
 profile = "black"
-line_length = 100
+line_length = 80
 
 [tool.mypy]
 python_version = "3.14"
@@ -78,10 +78,14 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 
+[tool.flake8]
+max-line-length = 80
+extend-ignore = ["E203", "W503"]
+
 [tool.taskipy.tasks]
 test = "pytest"
 cov = "pytest --cov=keyrunes_sdk --cov-report=term-missing --cov-report=xml"
-lint = "flake8 keyrunes_sdk tests"
+lint = "flake8 --max-line-length=80 keyrunes_sdk tests"
 format = "black keyrunes_sdk tests examples && isort keyrunes_sdk tests examples"
 type-check = "mypy keyrunes_sdk"
 clean = "rm -rf .pytest_cache htmlcov .coverage coverage.xml dist/ build/ *.egg-info && find . -type d -name __pycache__ -exec rm -rf {} + && find . -type f -name '*.pyc' -delete"
