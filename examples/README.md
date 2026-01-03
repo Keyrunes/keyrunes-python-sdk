@@ -15,7 +15,7 @@ Before running the examples, make sure you have:
 ```bash
    # Check from inside container (this should work)
    docker-compose exec keyrunes curl http://127.0.0.1:3000/api/health
-   
+
    # Or try from host (port 3000)
    curl http://localhost:3000/api/health
 ```
@@ -113,7 +113,7 @@ If you see errors about Keyrunes not being available:
 ```bash
    # Try the API health endpoint
    curl http://localhost:3000/api/health
-   
+
    # Or check from inside the container
    docker-compose exec keyrunes curl http://127.0.0.1:3000/api/health
 ```
@@ -239,4 +239,3 @@ After running the examples:
 - Check the main README.md
 - Review the test files in `tests/` directory
 - See the source code documentation
-

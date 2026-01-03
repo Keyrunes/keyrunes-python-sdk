@@ -1,5 +1,6 @@
 """Keyrunes API Client."""
 
+import os
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
@@ -38,6 +39,8 @@ class KeyrunesClient:
         base_url: Base URL of the Keyrunes API
             (e.g., "https://keyrunes.example.com")
         api_key: Optional API key for authentication
+        organization_key: Optional Organization Key (required for v0.2.0+)
+            If not provided, looks for KEYRUNES_ORG_KEY env var
         timeout: Request timeout in seconds (default: 30)
 
     Example:
@@ -50,11 +53,16 @@ class KeyrunesClient:
         self,
         base_url: str,
         api_key: Optional[str] = None,
+        organization_key: Optional[str] = None,
         timeout: int = 30,
     ) -> None:
         """Initialize Keyrunes client."""
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        # Prioritize explicit argument, then env var
+        self.organization_key = organization_key or os.getenv(
+            "KEYRUNES_ORG_KEY"
+        )
         self.timeout = timeout
         self._token: Optional[str] = None
         self._token_data: Optional[Dict[str, Any]] = None
@@ -62,6 +70,11 @@ class KeyrunesClient:
 
         if api_key:
             self._client.headers.update({"X-API-Key": api_key})
+
+        if self.organization_key:
+            self._client.headers.update(
+                {"X-Organization-Key": self.organization_key}
+            )
 
     def _make_request(
         self,
@@ -190,13 +203,16 @@ class KeyrunesClient:
             user=user_model,
         )
 
-    def login(self, username: str, password: str) -> Token:
+    def login(
+        self, username: str, password: str, namespace: str = "public"
+    ) -> Token:
         """
         Authenticate user and obtain access token.
 
         Args:
             username: Username or email
             password: User password
+            namespace: User namespace (default: "public")
 
         Returns:
             Token object containing access token and user info
@@ -206,10 +222,14 @@ class KeyrunesClient:
 
         Example:
             >>> client = KeyrunesClient("https://keyrunes.example.com")
-            >>> token = client.login("user@example.com", "password123")
+            >>> token = client.login(
+            ...     "user@example.com", "password123", namespace="public"
+            ... )
             >>> client.set_token(token.access_token)
         """
-        credentials = LoginCredentials(identity=username, password=password)
+        credentials = LoginCredentials(
+            identity=username, password=password, namespace=namespace
+        )
         response = self._make_request(
             "POST",
             "/api/login",
@@ -228,7 +248,12 @@ class KeyrunesClient:
         return token
 
     def register_user(
-        self, username: str, email: str, password: str, **attributes: Any
+        self,
+        username: str,
+        email: str,
+        password: str,
+        namespace: str = "public",
+        **attributes: Any,
     ) -> User:
         """
         Register a new user.
@@ -237,6 +262,7 @@ class KeyrunesClient:
             username: Username (3-50 characters)
             email: User email address
             password: Password (minimum 8 characters)
+            namespace: User namespace (default: "public")
             **attributes: Additional user attributes
 
         Returns:
@@ -251,6 +277,7 @@ class KeyrunesClient:
             ...     username="newuser",
             ...     email="newuser@example.com",
             ...     password="securepass123",
+            ...     namespace="my-app",
             ...     department="Engineering"
             ... )
         """
@@ -258,6 +285,7 @@ class KeyrunesClient:
             username=username,
             email=email,
             password=password,
+            namespace=namespace,
             attributes=attributes,
         )
         response = self._make_request(
@@ -283,6 +311,7 @@ class KeyrunesClient:
         email: str,
         password: str,
         admin_key: str,
+        namespace: str = "public",
         **attributes: Any,
     ) -> User:
         """
@@ -293,6 +322,7 @@ class KeyrunesClient:
             email: Admin email address
             password: Password (minimum 8 characters)
             admin_key: Admin registration key
+            namespace: User namespace (default: "public")
             **attributes: Additional user attributes
 
         Returns:
@@ -316,6 +346,7 @@ class KeyrunesClient:
             email=email,
             password=password,
             admin_key=admin_key,
+            namespace=namespace,
             attributes=attributes,
         )
         response = self._make_request(

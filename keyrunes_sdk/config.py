@@ -69,6 +69,7 @@ class _GlobalConfig:
         self,
         base_url: str,
         api_key: Optional[str] = None,
+        organization_key: Optional[str] = None,
         timeout: int = 30,
     ) -> KeyrunesClient:
         """
@@ -77,6 +78,7 @@ class _GlobalConfig:
         Args:
             base_url: Base URL of the Keyrunes API
             api_key: Optional API key for authentication
+            organization_key: Optional Organization Key (required for v0.2.0+)
             timeout: Request timeout in seconds (default: 30)
 
         Returns:
@@ -91,7 +93,10 @@ class _GlobalConfig:
             ... )
         """
         client = KeyrunesClient(
-            base_url=base_url, api_key=api_key, timeout=timeout
+            base_url=base_url,
+            api_key=api_key,
+            organization_key=organization_key,
+            timeout=timeout,
         )
         self.set_client(client)
         return client
@@ -133,6 +138,7 @@ def get_config() -> _GlobalConfig:
 def configure(
     base_url: str,
     api_key: Optional[str] = None,
+    organization_key: Optional[str] = None,
     timeout: int = 30,
 ) -> KeyrunesClient:
     """
@@ -145,6 +151,7 @@ def configure(
     Args:
         base_url: Base URL of the Keyrunes API
         api_key: Optional API key for authentication
+        organization_key: Optional Organization Key (required for v0.2.0+)
         timeout: Request timeout in seconds (default: 30)
 
     Returns:
@@ -167,6 +174,7 @@ def configure(
     return _config.configure(
         base_url=base_url,
         api_key=api_key,
+        organization_key=organization_key,
         timeout=timeout,
     )
 

@@ -26,9 +26,11 @@ from keyrunes_sdk import (
     require_admin,
     require_group,
 )
+from keyrunes_sdk.exceptions import UserNotFoundError
 
 KEYRUNES_URL = os.getenv("KEYRUNES_BASE_URL", "http://localhost:3000")
 ADMIN_KEY = os.getenv("ADMIN_KEY", "dev_admin_key_change_in_production")
+ORG_KEY = os.getenv("KEYRUNES_ORG_KEY")
 
 
 def print_section(title: str) -> None:
@@ -84,7 +86,7 @@ def test_user_registration(client: KeyrunesClient) -> Optional[tuple]:
 
     try:
         user_data = user_registration_payload()
-        user = client.register_user(**user_data)
+        user = client.register_user(**user_data, namespace="public")
 
         print_success(f"User registered: {user.username} ({user.email})")
         print_info(f"User ID: {user.id}")
@@ -106,7 +108,9 @@ def test_user_login(client: KeyrunesClient, user_data: dict) -> bool:
         login_data = login_payload(
             email=user_data["email"], password=user_data["password"]
         )
-        token = client.login(login_data["identity"], login_data["password"])
+        token = client.login(
+            user_data["username"], login_data["password"], namespace="public"
+        )
 
         print_success("Login successful!")
         print_info(f"Token Type: {token.token_type}")
@@ -132,7 +136,7 @@ def test_admin_registration(client: KeyrunesClient) -> Optional[tuple]:
 
     try:
         admin_data = admin_registration_payload(admin_key=ADMIN_KEY)
-        admin = client.register_admin(**admin_data)
+        admin = client.register_admin(**admin_data, namespace="public")
 
         print_success(f"Admin registered: {admin.username} ({admin.email})")
         print_info(f"Admin ID: {admin.id}")
@@ -249,7 +253,11 @@ def test_context_manager(user_data: dict) -> None:
             email=user_data["email"], password=user_data["password"]
         )
         with KeyrunesClient(base_url=KEYRUNES_URL) as client:
-            token = client.login(login_data["identity"], login_data["password"])
+            token = client.login(
+                login_data["identity"],
+                login_data["password"],
+                namespace="public",
+            )
             print_success("Context manager working correctly")
             print_info(f"Token obtained: {token.access_token[:30]}...")
 
@@ -269,7 +277,7 @@ def main() -> int:
         print_info("  docker-compose up -d")
         return 1
 
-    client = KeyrunesClient(base_url=KEYRUNES_URL)
+    client = KeyrunesClient(base_url=KEYRUNES_URL, organization_key=ORG_KEY)
 
     user_result = test_user_registration(client)
     if not user_result:
@@ -287,23 +295,33 @@ def main() -> int:
         return 1
     admin_id, admin_data = admin_result
 
-    admin_client = KeyrunesClient(base_url=KEYRUNES_URL)
+    admin_client = KeyrunesClient(
+        base_url=KEYRUNES_URL, organization_key=ORG_KEY
+    )
     admin_login_data = login_payload(
         email=admin_data["email"], password=admin_data["password"]
     )
     admin_client.login(
-        admin_login_data["identity"], admin_login_data["password"]
+        admin_login_data["identity"],
+        admin_login_data["password"],
+        namespace="public",
     )
 
     if admin_client._token_data:
         admin_groups = admin_client._token_data.get("groups", [])
         if "superadmin" not in admin_groups:
             print_info(
-                "Note: Admin may need to be manually added to superadmin group in database."
+                "Note: Admin may need to be manually added to superadmin group "
+                "in database."
             )
             print_info("For testing, you can run:")
             print_info(
-                f"  docker-compose exec -T postgres psql -U keyrunes -d keyrunes -c \"INSERT INTO user_groups (user_id, group_id) SELECT {admin_id}, group_id FROM groups WHERE name = 'superadmin' ON CONFLICT DO NOTHING;\""
+                "  docker-compose exec -T postgres psql -U keyrunes -d "
+                "keyrunes "
+                '-c "INSERT INTO user_groups (user_id, group_id) '
+                f"SELECT {admin_id}, group_id FROM groups "
+                "WHERE name = 'superadmin' "
+                'ON CONFLICT DO NOTHING;"'
             )
             print_info("Then login again to refresh the token.")
 

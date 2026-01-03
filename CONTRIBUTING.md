@@ -241,4 +241,3 @@ For questions or support, please open an issue or contact the maintainers.
 - [Python SDK Documentation](README.md)
 - Testing Guide: Veja a seção de testes no README.md
 - [Publishing Guide](PUBLISHING.md)
-

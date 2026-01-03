@@ -6,6 +6,9 @@ This example shows how to configure the client once and use decorators
 without needing to pass the client in every function.
 """
 
+import os
+import sys
+
 from keyrunes_sdk import (
     configure,
     get_global_client,
@@ -14,10 +17,14 @@ from keyrunes_sdk import (
 )
 
 print("[INFO] Configuring Keyrunes SDK...")
-client = configure(base_url="http://localhost:3000")
+# NOTE: organization_key will be read from KEYRUNES_ORG_KEY env var
+client = configure(
+    base_url="http://localhost:3000",
+    organization_key=os.getenv("KEYRUNES_ORG_KEY"),
+)
 
 print("[INFO] Logging in...")
-client.login("admin@example.com", "adminpass123")
+client.login("admin@example.com", "adminpass123", namespace="public")
 print("[OK] Login successful!\n")
 
 
@@ -54,7 +61,7 @@ def sensitive_operation(user_id: str) -> str:
     return f"Sensitive operation executed by {user_id}"
 
 
-def main():
+def main() -> None:
     """Example usage of decorated functions."""
 
     print("=" * 60)
@@ -63,7 +70,12 @@ def main():
     print()
 
     print("[INFO] Current user:")
-    current_user = get_global_client().get_current_user()
+    global_client = get_global_client()
+    if not global_client:
+        print("[ERROR] Global client not not configured")
+        return
+
+    current_user = global_client.get_current_user()
     print(f"   Username: {current_user.username}")
     print(f"   Email: {current_user.email}")
     print(f"   Groups: {current_user.groups}")
@@ -119,7 +131,7 @@ def main():
     print()
 
 
-def example_multi_file_structure():
+def example_multi_file_structure() -> None:
     """
     Example of how to organize in multiple files.
 
@@ -178,6 +190,7 @@ if __name__ == "__main__":
         print("Make sure that:")
         print("  1. Keyrunes is running: docker-compose up -d")
         print(
-            "  2. Admin was registered: poetry run python examples/test_local.py"
+            "  2. Admin was registered: "
+            "poetry run python examples/test_local.py"
         )
         sys.exit(1)

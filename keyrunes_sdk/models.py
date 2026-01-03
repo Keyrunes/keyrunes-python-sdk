@@ -64,6 +64,7 @@ class UserRegistration(BaseModel):
     )
     email: EmailStr = Field(..., description="User email")
     password: str = Field(..., min_length=8, description="Password")
+    namespace: str = Field("default", description="User namespace")
     attributes: Dict[str, Any] = Field(
         default_factory=dict, description="Additional attributes"
     )
@@ -80,11 +81,14 @@ class LoginCredentials(BaseModel):
 
     identity: str = Field(..., description="Username or email")
     password: str = Field(..., description="Password")
+    namespace: str = Field("default", description="User namespace")
 
     @classmethod
-    def from_username(cls, username: str, password: str) -> "LoginCredentials":
+    def from_username(
+        cls, username: str, password: str, namespace: str = "default"
+    ) -> "LoginCredentials":
         """Create from username parameter (for backward compatibility)."""
-        return cls(identity=username, password=password)
+        return cls(identity=username, password=password, namespace=namespace)
 
 
 class GroupCheck(BaseModel):
