@@ -1,11 +1,12 @@
 # Keyrunes SDK Python Client
 
 [![Tests](https://github.com/Keyrunes/keyrunes-python-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/Keyrunes/keyrunes-python-sdk/actions/workflows/ci.yml)
-[![Coverage](https://codecov.io/gh/Keyrunes/keyrunes-python-sdk/branch/main/graph/badge.svg)](https://codecov.io/gh/Keyrunes/keyrunes-python-sdk)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+
 Python SDK for integration with the [Keyrunes Authorization System](https://github.com/Keyrunes/keyrunes), a modern high-performance authorization system built in Rust.
+[Pypi](https://pypi.org/project/keyrunes-python-sdk/)
 
 ## Features
 
