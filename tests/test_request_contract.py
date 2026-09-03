@@ -15,7 +15,11 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from keyrunes_sdk.client import KeyrunesClient
-from keyrunes_sdk.exceptions import AuthenticationError
+from keyrunes_sdk.exceptions import (
+    AuthenticationError,
+    InvalidTokenError,
+    NetworkError,
+)
 from tests.test_property_based import PROPERTY_SETTINGS
 
 # A JWT-shaped token with no signature; the SDK decodes it without verifying.
@@ -412,3 +416,315 @@ class TestRegistrationDefaults:
         with pytest.raises(NetworkError):
             call(client)
         client.close()
+
+
+class TestIdentityFieldsSurviveNormalization:
+    """Keyrunes answers with more identity than ``User`` used to carry.
+
+    A consumer that keys its own records off the JWT ``sub`` needs ``user_id``,
+    which is a different value from ``id`` (the external UUID). Losing it
+    silently re-keys every mirrored record, so it is pinned here.
+    """
+
+    #: What the Keyrunes server actually returns for a user.
+    SERVER_USER = {
+        "id": "0b8f6e9c-2c4c-4f6f-9c0e-1f2a3b4c5d6e",
+        "user_id": 42,
+        "email": "john@example.com",
+        "username": "john",
+        "groups": ["users"],
+        "namespace": "public",
+        "organization_id": 7,
+        "first_login": True,
+    }
+
+    def test_user_id_is_kept_apart_from_the_external_id(self):
+        client = _client_with_transport(self.SERVER_USER)
+        client.set_token(JWT)
+
+        user = client.get_user("someone-else")
+
+        assert user.id == self.SERVER_USER["id"]
+        assert user.user_id == "42"
+
+    def test_namespace_and_organization_survive(self):
+        client = _client_with_transport(self.SERVER_USER)
+        client.set_token(JWT)
+
+        user = client.get_user("someone-else")
+
+        assert user.namespace == "public"
+        assert user.organization_id == 7
+        assert user.first_login is True
+
+    def test_a_payload_without_the_extra_fields_still_parses(self):
+        client = _client_with_transport(
+            {
+                "id": "abc",
+                "username": "u",
+                "email": "u@example.com",
+                "groups": [],
+            }
+        )
+        client.set_token(JWT)
+
+        user = client.get_user("someone-else")
+
+        assert user.user_id is None
+        assert user.namespace is None
+        assert user.organization_id is None
+        assert user.first_login is False
+
+    def test_login_carries_the_password_change_flag(self):
+        client = _client_with_transport(
+            {
+                "token": JWT,
+                "requires_password_change": True,
+                "user": self.SERVER_USER,
+            }
+        )
+
+        token = client.login("john", "password123")
+
+        assert token.requires_password_change is True
+        assert token.user is not None
+        assert token.user.user_id == "42"
+
+    def test_the_password_change_flag_defaults_to_false(self):
+        client = _client_with_transport(
+            {"token": JWT, "user": self.SERVER_USER}
+        )
+
+        assert (
+            client.login("john", "password123").requires_password_change
+            is False
+        )
+
+
+class TestRefreshToken:
+    """``POST /api/refresh-token`` exchanges a live token for a fresh one."""
+
+    def test_posts_the_current_token_to_the_refresh_endpoint(self):
+        client = _client_with_transport({"token": JWT})
+        client.set_token(JWT)
+
+        client.refresh_token()
+
+        sent = _sent(client)
+        assert sent["method"] == "POST"
+        assert sent["url"] == f"{BASE_URL}/api/refresh-token"
+        assert sent["json"] == {"token": JWT}
+
+    def test_an_explicit_token_wins_over_the_stored_one(self):
+        client = _client_with_transport({"token": JWT})
+        client.set_token("stored-token")
+
+        client.refresh_token(JWT)
+
+        assert _sent(client)["json"] == {"token": JWT}
+
+    def test_the_refreshed_token_is_adopted_by_the_client(self):
+        client = _client_with_transport({"token": JWT})
+        client.set_token("stale")
+
+        refreshed = client.refresh_token("stale")
+
+        assert refreshed.access_token == JWT
+        assert client._token == JWT
+
+    def test_refreshing_without_a_token_raises_rather_than_calling_the_server(
+        self,
+    ):
+        client = _client_with_transport({"token": JWT})
+
+        with pytest.raises(InvalidTokenError):
+            client.refresh_token()
+
+        client._client.request.assert_not_called()
+
+    def test_a_rejected_token_surfaces_as_an_authentication_error(self):
+        client = _client_with_transport({"error": "expired"}, status=401)
+
+        with pytest.raises(AuthenticationError):
+            client.refresh_token("expired-token")
+
+
+class TestCurrentUserEndpoint:
+    """``get_current_user`` and the claims shortcut it can take."""
+
+    SERVER_USER = {
+        "id": "ext-1",
+        "user_id": 42,
+        "email": "john@example.com",
+        "username": "john",
+        "groups": ["users"],
+    }
+
+    def test_asks_the_server_at_api_me(self):
+        # The Keyrunes router exposes /api/me; /api/users/me does not exist and
+        # answered 404 against a real server.
+        client = _client_with_transport(self.SERVER_USER)
+        client._token = JWT
+        client._token_data = None
+
+        client.get_current_user()
+
+        sent = _sent(client)
+        assert sent["method"] == "GET"
+        assert sent["url"] == f"{BASE_URL}/api/me"
+
+    def test_the_claims_shortcut_skips_the_server(self):
+        client = _client_with_transport(self.SERVER_USER)
+        client.set_token(JWT)
+
+        user = client.get_current_user()
+
+        assert user.username == "john"
+        client._client.request.assert_not_called()
+
+    def test_force_refresh_always_asks_the_server(self):
+        # The shortcut reads a token the SDK never verified, so a caller
+        # deciding whether the token is still good must be able to demand the
+        # round trip.
+        client = _client_with_transport(self.SERVER_USER)
+        client.set_token(JWT)
+
+        user = client.get_current_user(force_refresh=True)
+
+        assert _sent(client)["url"] == f"{BASE_URL}/api/me"
+        assert user.user_id == "42"
+
+    def test_force_refresh_surfaces_a_rejected_token(self):
+        client = _client_with_transport({"error": "nope"}, status=401)
+        client.set_token(JWT)
+
+        with pytest.raises(AuthenticationError):
+            client.get_current_user(force_refresh=True)
+
+    def test_an_unauthenticated_client_never_calls_the_server(self):
+        client = _client_with_transport(self.SERVER_USER)
+
+        with pytest.raises(AuthenticationError):
+            client.get_current_user(force_refresh=True)
+
+        client._client.request.assert_not_called()
+
+
+class TestRegistrationResponseShape:
+    """``POST /api/register`` answers with the bare user object.
+
+    The Keyrunes handler returns ``Json(auth_response.user)`` — there is no
+    ``{"user": ...}`` envelope — so requiring one made every real registration
+    fail with "Unexpected response format".
+    """
+
+    BARE_USER = {
+        "id": "ext-1",
+        "user_id": 7,
+        "email": "new@example.com",
+        "username": "new",
+        "groups": ["users"],
+    }
+
+    def test_a_bare_user_object_is_accepted(self):
+        client = _client_with_transport(self.BARE_USER)
+
+        user = client.register_user("new", "new@example.com", "password123")
+
+        assert user.username == "new"
+        assert user.user_id == "7"
+
+    def test_a_wrapped_user_object_is_still_accepted(self):
+        client = _client_with_transport({"user": self.BARE_USER})
+
+        assert (
+            client.register_user("new", "new@example.com", "pw123456").user_id
+            == "7"
+        )
+
+    def test_a_response_with_no_identifier_is_rejected(self):
+        client = _client_with_transport({"message": "created"})
+
+        with pytest.raises(NetworkError):
+            client.register_user("new", "new@example.com", "password123")
+
+    def test_admin_registration_accepts_a_bare_user_object(self):
+        client = _client_with_transport(self.BARE_USER)
+
+        admin = client.register_admin(
+            "new", "new@example.com", "password123", admin_key="k"
+        )
+
+        assert admin.user_id == "7"
+
+
+class TestRegistrationGroupPlacement:
+    """``group`` is a top-level field on the server's RegisterApi payload."""
+
+    BARE_USER = {
+        "id": "ext-1",
+        "user_id": 7,
+        "email": "n@example.com",
+        "username": "n",
+    }
+
+    def test_group_is_sent_top_level_not_nested_in_attributes(self):
+        client = _client_with_transport(self.BARE_USER)
+
+        client.register_user(
+            "newbie", "n@example.com", "password123", group="instructor"
+        )
+
+        body = _sent(client)["json"]
+        assert body["group"] == "instructor"
+        assert "group" not in body["attributes"]
+
+    def test_no_group_key_is_sent_when_none_is_given(self):
+        client = _client_with_transport(self.BARE_USER)
+
+        client.register_user("newbie", "n@example.com", "password123")
+
+        assert "group" not in _sent(client)["json"]
+
+    def test_other_keyword_attributes_still_nest_under_attributes(self):
+        client = _client_with_transport(self.BARE_USER)
+
+        client.register_user(
+            "newbie", "n@example.com", "password123", department="Engineering"
+        )
+
+        body = _sent(client)["json"]
+        assert body["attributes"] == {"department": "Engineering"}
+
+
+class TestErrorStatusIsCarried:
+    """A caller must be able to tell a refused request from an outage."""
+
+    @pytest.mark.parametrize("status", [400, 409, 422, 500, 502, 503])
+    def test_the_response_status_reaches_the_caller(self, status):
+        client = _client_with_transport({"error": "nope"}, status=status)
+
+        with pytest.raises(NetworkError) as excinfo:
+            client.login("john", "password123")
+
+        assert excinfo.value.status_code == status
+
+    def test_a_transport_failure_carries_no_status(self):
+        import httpx
+
+        client = _client_with_transport({})
+        client._client.request.side_effect = httpx.ConnectError("down")
+
+        with pytest.raises(NetworkError) as excinfo:
+            client.login("john", "password123")
+
+        # No response ever arrived, so there is no status to report.
+        assert excinfo.value.status_code is None
+
+    def test_the_message_still_reads_normally(self):
+        client = _client_with_transport({"error": "duplicate"}, status=409)
+
+        with pytest.raises(NetworkError) as excinfo:
+            client.login("john", "password123")
+
+        assert "duplicate" in str(excinfo.value)

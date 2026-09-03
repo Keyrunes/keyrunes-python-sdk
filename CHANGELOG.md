@@ -5,6 +5,61 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.3.0] - 2026-09-03
+
+### Added
+
+- `User.user_id`, carrying the internal identifier Keyrunes puts in the JWT
+  `sub` claim. It is a different value from `User.id` (the external UUID), and
+  a consumer that keys its own records off `sub` needs it; before this release
+  it was discarded during normalization and could only be recovered by
+  re-parsing the token.
+- `User.namespace`, `User.organization_id` and `User.first_login`, all of which
+  the server returns and normalization used to drop.
+- `Token.requires_password_change`, so a login that must be followed by a
+  password change can be detected without reading the raw response.
+- `KeyrunesClient.refresh_token()`, wrapping `POST /api/refresh-token`. It
+  accepts an explicit token or falls back to the client's current one, raises
+  `InvalidTokenError` when neither is available, and adopts the refreshed
+  token the way `login()` does.
+- `get_current_user(force_refresh=True)`, which always asks the server. The
+  claims shortcut reads a token the SDK never verified, so it cannot answer
+  "is this token still accepted"; a caller validating a token needs the round
+  trip.
+- `KeyrunesError.status_code`, carrying the HTTP status when the error came
+  from a response rather than from the transport. Without it a caller cannot
+  tell "the server refused this request" (4xx) from "the server or the network
+  failed" (5xx, or no response at all), and both are raised as `NetworkError`.
+- `register_user(group=...)`, sent as a top-level field.
+- A `py.typed` marker (PEP 561). The package was already fully typed, but
+  without the marker a consumer running mypy saw every SDK import as
+  untyped.
+
+### Fixed
+
+- `get_current_user()` asked for `/api/users/me`, which the Keyrunes router
+  does not expose — the real route is `/api/me`, so the call answered 404
+  against a live server whenever the claims shortcut did not cover it. The
+  endpoint is now a named constant, `ENDPOINT_ME`.
+- `register_user()` and `register_admin()` required the response to be
+  `{"user": {...}}`, but `POST /api/register` answers with the bare user
+  object. Every registration against a real server failed with "Unexpected
+  response format". Both shapes are now accepted.
+- Extra keyword arguments to `register_user()` were nested under `attributes`,
+  so a `group` never reached the server, which reads it as a top-level field.
+  `group` is now an explicit parameter placed at the top level; other keyword
+  attributes keep nesting under `attributes`.
+
+### Testing
+
+- Test count raised from 159 to 189.
+
+### Notes
+
+- Every added field is optional with a backwards-compatible default, and
+  `User.id` keeps its existing precedence (`id` → `user_id` → `external_id`).
+  Code written against 0.2.0 keeps working unchanged.
+
 ## [0.2.0] - 2026-09-03
 
 ### Added
