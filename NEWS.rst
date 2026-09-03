@@ -1,3 +1,33 @@
+0.3.0 (2026-09-03)
+==================
+
+Features
+--------
+
+- Keep ``user_id``, ``namespace``, ``organization_id`` and ``first_login`` on
+  ``User`` instead of discarding them during normalization
+- Carry ``requires_password_change`` on ``Token``
+- Add ``KeyrunesClient.refresh_token()`` for ``POST /api/refresh-token``
+- Add ``get_current_user(force_refresh=True)`` for callers that must validate a
+  token against the server rather than trust its unverified claims
+
+
+- Add ``KeyrunesError.status_code`` so a refused request can be told apart from
+  an outage
+- Add an explicit ``group`` parameter to ``register_user``
+
+
+Bugfixes
+--------
+
+- Ask ``/api/me`` instead of the non-existent ``/api/users/me`` in
+  ``get_current_user``
+- Accept the bare user object ``POST /api/register`` actually returns, instead
+  of requiring a ``{"user": ...}`` envelope that made every registration fail
+- Send ``group`` as a top-level registration field instead of burying it in
+  ``attributes``, where the server never looked
+
+
 0.2.0 (2026-09-03)
 ==================
 

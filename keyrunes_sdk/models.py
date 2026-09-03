@@ -28,6 +28,23 @@ class User(BaseModel):
     is_admin: bool = Field(
         False, description="Whether user has admin privileges"
     )
+    # Keyrunes answers with two identifiers: ``id`` is the external UUID and
+    # ``user_id`` is the internal integer the JWT carries as ``sub``. ``id``
+    # above keeps its historical precedence; this field is kept alongside it so
+    # a caller that keys its own records off ``sub`` can reach that value
+    # without re-parsing the token.
+    user_id: Optional[str] = Field(
+        None, description="Internal user identifier, as carried by the JWT sub"
+    )
+    namespace: Optional[str] = Field(
+        None, description="Namespace (tenant) the user belongs to"
+    )
+    organization_id: Optional[Any] = Field(
+        None, description="Organization the user belongs to"
+    )
+    first_login: bool = Field(
+        False, description="Whether the user has yet to complete a first login"
+    )
 
 
 class Group(BaseModel):
@@ -54,6 +71,10 @@ class Token(BaseModel):
     )
     refresh_token: Optional[str] = Field(None, description="Refresh token")
     user: Optional[User] = Field(None, description="User information")
+    requires_password_change: bool = Field(
+        False,
+        description="Whether the server wants the password changed before use",
+    )
 
 
 class UserRegistration(BaseModel):

@@ -11,6 +11,7 @@ from keyrunes_sdk.exceptions import (
     AuthenticationError,
     AuthorizationError,
     GroupNotFoundError,
+    InvalidTokenError,
     NetworkError,
     UserNotFoundError,
 )
@@ -22,6 +23,17 @@ from keyrunes_sdk.models import (
     User,
     UserRegistration,
 )
+
+#: Where the server answers "who is this token". The Keyrunes router exposes
+#: this as ``/api/me``; there is no ``/api/users/me``.
+#: Creates a user; answers with the bare user object.
+ENDPOINT_REGISTER = "/api/register"
+
+#: Where the server answers "who is this token".
+ENDPOINT_ME = "/api/me"
+
+#: Exchanges a still-valid token for a fresh one.
+ENDPOINT_REFRESH_TOKEN = "/api/refresh-token"
 
 
 class KeyrunesClient:
@@ -135,7 +147,10 @@ class KeyrunesClient:
                     error_msg = (
                         response.text or f"HTTP {response.status_code} error"
                     )
-                raise NetworkError(f"Request failed: {error_msg}")
+                raise NetworkError(
+                    f"Request failed: {error_msg}",
+                    status_code=response.status_code,
+                )
 
             try:
                 result: Dict[str, Any] = response.json()
@@ -170,6 +185,15 @@ class KeyrunesClient:
         normalized["is_admin"] = (
             is_admin_flag or has_admin_group or has_admin_in_name
         )
+        # Carried through untouched so a caller can key its own records off the
+        # same identifier the JWT ``sub`` uses, rather than off ``id``.
+        raw_user_id = data.get("user_id")
+        normalized["user_id"] = (
+            str(raw_user_id) if raw_user_id is not None else None
+        )
+        normalized["namespace"] = data.get("namespace")
+        normalized["organization_id"] = data.get("organization_id")
+        normalized["first_login"] = bool(data.get("first_login", False))
         return User(**normalized)
 
     def _user_from_token_claims(self) -> User:
@@ -221,6 +245,9 @@ class KeyrunesClient:
             expires_in=payload.get("expires_in"),
             refresh_token=payload.get("refresh_token"),
             user=user_model,
+            requires_password_change=bool(
+                payload.get("requires_password_change", False)
+            ),
         )
 
     def login(
@@ -267,12 +294,36 @@ class KeyrunesClient:
             self._token_data = None
         return token
 
+    @staticmethod
+    def _registration_payload(response: Any) -> Dict[str, Any]:
+        """Pull the user object out of a registration response.
+
+        ``POST /api/register`` answers with the bare user object. Some
+        deployments wrap it as ``{"user": {...}}``, so both are accepted.
+        """
+        if not isinstance(response, dict):
+            raise NetworkError(
+                "Unexpected response format for user registration."
+            )
+
+        wrapped = response.get("user")
+        if isinstance(wrapped, dict) and wrapped:
+            return wrapped
+
+        # A bare user object is identified by carrying an identifier; anything
+        # else is a response shape this SDK does not understand.
+        if response.get("id") or response.get("user_id"):
+            return response
+
+        raise NetworkError("Unexpected response format for user registration.")
+
     def register_user(
         self,
         username: str,
         email: str,
         password: str,
         namespace: str = "public",
+        group: Optional[str] = None,
         **attributes: Any,
     ) -> User:
         """
@@ -283,6 +334,8 @@ class KeyrunesClient:
             email: User email address
             password: Password (minimum 8 characters)
             namespace: User namespace (default: "public")
+            group: Group to place the new user in. Sent as a top-level field,
+                which is where the server reads it from.
             **attributes: Additional user attributes
 
         Returns:
@@ -308,22 +361,18 @@ class KeyrunesClient:
             namespace=namespace,
             attributes=attributes,
         )
+        data = registration.model_dump()
+        if group is not None:
+            data["group"] = group
+
         response = self._make_request(
             "POST",
-            "/api/register",
-            data=registration.model_dump(),
+            ENDPOINT_REGISTER,
+            data=data,
             use_auth=False,
         )
 
-        user_payload = (
-            response.get("user") if isinstance(response, dict) else None
-        )
-        if not user_payload:
-            raise NetworkError(
-                "Unexpected response format for user registration."
-            )
-
-        return self._normalize_user(user_payload)
+        return self._normalize_user(self._registration_payload(response))
 
     def register_admin(
         self,
@@ -371,20 +420,12 @@ class KeyrunesClient:
         )
         response = self._make_request(
             "POST",
-            "/api/register",
+            ENDPOINT_REGISTER,
             data=registration.model_dump(),
             use_auth=False,
         )
 
-        user_payload = (
-            response.get("user") if isinstance(response, dict) else None
-        )
-        if not user_payload:
-            raise NetworkError(
-                "Unexpected response format for admin registration."
-            )
-
-        return self._normalize_user(user_payload)
+        return self._normalize_user(self._registration_payload(response))
 
     def has_group(self, user_id: str, group_id: str) -> bool:
         """
@@ -470,9 +511,17 @@ class KeyrunesClient:
         response = self._make_request("GET", f"/api/users/{user_id}")
         return self._normalize_user(response)
 
-    def get_current_user(self) -> User:
+    def get_current_user(self, force_refresh: bool = False) -> User:
         """
         Get currently authenticated user information.
+
+        Args:
+            force_refresh: Ask the server even when the token's own claims
+                could answer. Required whenever the answer is used to decide
+                whether the token is still good: the claims shortcut reads a
+                token the SDK never verified, so it says nothing about whether
+                the server still accepts it (revoked, expired, or signed with
+                another key).
 
         Returns:
             User object for authenticated user
@@ -489,12 +538,10 @@ class KeyrunesClient:
         if not self._token:
             raise AuthenticationError("Not authenticated. Please login first.")
 
-        if self._token_data:
+        if self._token_data and not force_refresh:
             return self._user_from_token_claims()
 
-        # The claims shortcut above already handled every case where the token
-        # could answer, so a 404 here is a genuine miss and is propagated.
-        response = self._make_request("GET", "/api/users/me")
+        response = self._make_request("GET", ENDPOINT_ME)
         return self._normalize_user(response)
 
     def get_user_groups(self, user_id: Optional[str] = None) -> List[str]:
@@ -541,6 +588,44 @@ class KeyrunesClient:
             )
         except Exception:
             self._token_data = None
+
+    def refresh_token(self, token: Optional[str] = None) -> Token:
+        """
+        Exchange a still-valid token for a fresh one.
+
+        Args:
+            token: Token to exchange. Defaults to the client's current token.
+
+        Returns:
+            Token object carrying the new access token.
+
+        Raises:
+            InvalidTokenError: If no token is available to exchange
+            AuthenticationError: If the server rejects the token
+            NetworkError: If the request fails
+
+        Example:
+            >>> client = KeyrunesClient("https://keyrunes.example.com")
+            >>> client.set_token("eyJhbGciOiJIUzI1NiIs...")
+            >>> refreshed = client.refresh_token()
+            >>> client.set_token(refreshed.access_token)
+        """
+        current = token or self._token
+        if not current:
+            raise InvalidTokenError("No token available to refresh.")
+
+        response = self._make_request(
+            "POST",
+            ENDPOINT_REFRESH_TOKEN,
+            data={"token": current},
+            use_auth=False,
+        )
+
+        refreshed = self._parse_token_response(response)
+        # Refreshing is only ever useful if the client keeps using the result,
+        # so adopt it the way login() does.
+        self.set_token(refreshed.access_token)
+        return refreshed
 
     def clear_token(self) -> None:
         """
