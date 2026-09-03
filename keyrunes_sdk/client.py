@@ -137,7 +137,12 @@ class KeyrunesClient:
                     )
                 raise NetworkError(f"Request failed: {error_msg}")
 
-            result: Dict[str, Any] = response.json()
+            try:
+                result: Dict[str, Any] = response.json()
+            except (ValueError, TypeError) as e:
+                raise NetworkError(
+                    f"Malformed JSON in response from {url}: {str(e)}"
+                )
             return result
 
         except httpx.RequestError as e:
@@ -166,6 +171,21 @@ class KeyrunesClient:
             is_admin_flag or has_admin_group or has_admin_in_name
         )
         return User(**normalized)
+
+    def _user_from_token_claims(self) -> User:
+        """Build a :class:`User` out of the claims carried by the JWT.
+
+        Only called once ``self._token_data`` is known to be populated.
+        """
+        token_data = self._token_data or {}
+        return self._normalize_user(
+            {
+                "id": str(token_data.get("sub", "")),
+                "username": token_data.get("username", ""),
+                "email": token_data.get("email", ""),
+                "groups": token_data.get("groups", []),
+            }
+        )
 
     def _parse_token_response(self, payload: Dict[str, Any]) -> Token:
         """
@@ -409,13 +429,8 @@ class KeyrunesClient:
             check = GroupCheck(**response)
             return check.has_access
         except UserNotFoundError:
-            if token_user_id and str(user_id) == token_user_id:
-                groups = (
-                    self._token_data.get("groups", [])
-                    if self._token_data
-                    else []
-                )
-                return group_id in groups
+            # The self-lookup above already returned for the authenticated
+            # user, so reaching here always means a genuine miss.
             raise GroupNotFoundError(
                 f"Group '{group_id}' not found or user not in group"
             )
@@ -448,33 +463,12 @@ class KeyrunesClient:
         )
 
         if token_user_id and str(user_id) == token_user_id and self._token_data:
-            token_data = self._token_data
-            user_data = {
-                "id": str(token_data.get("sub", "")),
-                "username": token_data.get("username", ""),
-                "email": token_data.get("email", ""),
-                "groups": token_data.get("groups", []),
-            }
-            return self._normalize_user(user_data)
+            return self._user_from_token_claims()
 
-        try:
-            response = self._make_request("GET", f"/api/users/{user_id}")
-            return self._normalize_user(response)
-        except UserNotFoundError:
-            if (
-                token_user_id
-                and str(user_id) == token_user_id
-                and self._token_data
-            ):
-                token_data = self._token_data
-                user_data = {
-                    "id": str(token_data.get("sub", "")),
-                    "username": token_data.get("username", ""),
-                    "email": token_data.get("email", ""),
-                    "groups": token_data.get("groups", []),
-                }
-                return self._normalize_user(user_data)
-            raise
+        # The claims shortcut above already handled the authenticated user, so
+        # a 404 here is always a genuine miss and is propagated as such.
+        response = self._make_request("GET", f"/api/users/{user_id}")
+        return self._normalize_user(response)
 
     def get_current_user(self) -> User:
         """
@@ -496,29 +490,12 @@ class KeyrunesClient:
             raise AuthenticationError("Not authenticated. Please login first.")
 
         if self._token_data:
-            token_data = self._token_data
-            user_data = {
-                "id": str(token_data.get("sub", "")),
-                "username": token_data.get("username", ""),
-                "email": token_data.get("email", ""),
-                "groups": token_data.get("groups", []),
-            }
-            return self._normalize_user(user_data)
+            return self._user_from_token_claims()
 
-        try:
-            response = self._make_request("GET", "/api/users/me")
-            return self._normalize_user(response)
-        except UserNotFoundError:
-            if self._token_data:
-                token_data = self._token_data
-                user_data = {
-                    "id": str(token_data.get("sub", "")),
-                    "username": token_data.get("username", ""),
-                    "email": token_data.get("email", ""),
-                    "groups": token_data.get("groups", []),
-                }
-                return self._normalize_user(user_data)
-            raise
+        # The claims shortcut above already handled every case where the token
+        # could answer, so a 404 here is a genuine miss and is propagated.
+        response = self._make_request("GET", "/api/users/me")
+        return self._normalize_user(response)
 
     def get_user_groups(self, user_id: Optional[str] = None) -> List[str]:
         """

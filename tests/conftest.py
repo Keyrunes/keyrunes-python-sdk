@@ -1,14 +1,35 @@
 """Pytest configuration and fixtures."""
 
+import os
 from unittest.mock import MagicMock, Mock
 
 import pytest
 from faker import Faker
+from hypothesis import settings as hypothesis_settings
 
 from keyrunes_sdk.client import KeyrunesClient
 from keyrunes_sdk.models import Token, User
 
 fake = Faker()
+
+# Hypothesis profiles.
+#
+# ``fast`` is what the mutation runs (``mutmut``) use: a mutant only has to be
+# distinguished from the original, and the whole suite is re-run once per
+# mutant, so breadth is traded for wall-clock time.
+# ``derandomize`` + ``database=None`` keep every mutant judged against the
+# exact same examples, so a mutant is reported as survived only when the suite
+# genuinely cannot tell it apart from the original.
+hypothesis_settings.register_profile(
+    "fast",
+    max_examples=15,
+    deadline=None,
+    derandomize=True,
+    database=None,
+)
+hypothesis_settings.register_profile("dev", max_examples=50, deadline=None)
+hypothesis_settings.register_profile("ci", max_examples=300, deadline=None)
+hypothesis_settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
 
 
 @pytest.fixture
