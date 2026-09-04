@@ -5,6 +5,18 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.3.1] - 2026-09-04
+
+### Fixed
+
+- `mutmut` is no longer a runtime dependency. It was declared in
+  `[tool.poetry.dependencies]` instead of the dev group, so installing this SDK
+  pulled a mutation-testing tool and its whole tree — `libcst`, `textual`,
+  `rich`, `setproctitle`, `pyyaml-ft`, `markdown-it-py`, `mdit-py-plugins`,
+  `mdurl`, `linkify-it-py`, `sortedcontainers` — into every consumer, including
+  production images. Affected 0.2.0 and 0.3.0; nothing in the library imported
+  it, so upgrading only removes packages.
+
 ## [0.3.0] - 2026-09-03
 
 ### Added
