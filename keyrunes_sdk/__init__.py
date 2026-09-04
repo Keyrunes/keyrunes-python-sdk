@@ -1,6 +1,6 @@
 """Keyrunes SDK - Python client for Keyrunes Authorization System."""
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 from keyrunes_sdk.client import KeyrunesClient
 from keyrunes_sdk.config import (

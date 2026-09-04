@@ -1,3 +1,17 @@
+0.3.1 (2026-09-04)
+==================
+
+Bugfixes
+--------
+
+- Move ``mutmut`` out of the runtime dependencies and into the dev group. It
+  was declared as a runtime dependency in 0.2.0 and 0.3.0, so installing this
+  SDK dragged a mutation-testing tool and its whole tree (``libcst``,
+  ``textual``, ``rich`` and seven others) into every consumer, production
+  images included. Nothing in the library imported it, so upgrading only
+  removes packages.
+
+
 0.3.0 (2026-09-03)
 ==================
 
