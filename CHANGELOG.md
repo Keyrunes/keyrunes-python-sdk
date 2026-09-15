@@ -1,271 +1,253 @@
 # Changelog
 
-Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+Todas as mudanças notáveis do SDK Python do Keyrunes.
 
-O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
-e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
+Gerado por `git-cliff` a partir dos commits convencionais — o corpo de cada
+commit vira o texto da entrada. **Não edite à mão**: a próxima geração
+sobrescreve. Para mudar o texto de uma entrada, reescreva a mensagem do commit
+(`git rebase -i`); para mudar a forma, edite `cliff.toml` e rode
+`poetry run task changelog`.
 
 ## [0.4.0] - 2026-09-15
 
-### Added
+### Adicionado
 
-- `KeyrunesClient.change_password(current_password, new_password)`, wrapping
-  `POST /api/user/change-password`. The server has served this endpoint all
-  along; the SDK exposed `login`, `refresh_token`, `register_user` and the group
-  queries, and not this one. Anyone who needed it built the HTTP call by hand —
-  which is what happened downstream, after first concluding from the SDK's
-  surface that the operation did not exist at all.
+- **client**: change_password, que a API servia e o SDK não expunha
 
-  Three details the endpoint carries, and each one bites if read wrong:
+  `POST /api/user/change-password` existe no Keyrunes desde sempre. O SDK expunha
+  `login`, `refresh_token`, `register_user` e as consultas de grupo — e não esta.
 
-  - it lives at `/api/user/change-password`, **not** `/api/change-password` —
-    the router registers the first, and the handler behind the second is dead
-    code marked `#[allow(dead_code)]`, so pointing at it answers 404;
-  - it answers errors as **plain text** (`e.to_string()`), not JSON, and with
-    status **400** rather than 401 — so this client raises `NetworkError`, the
-    same class it already uses for every non-401/403/404 status, and preserves
-    the server's own wording, because "invalid current password" and "password
-    too short" call for opposite fixes;
-  - changing the password clears the account's `first_login` flag server-side,
-    which is what `requires_password_change` reports at login. There is no
-    second call to make.
+  Quem precisou dela montou o HTTP à mão: foi o que aconteceu no PlayfulLMS, e
+  antes disso a conclusão foi pior — olhando só a superfície do SDK, dei a operação
+  como inexistente, e a plataforma quase mandou as pessoas trocarem a senha no
+  provedor.
 
-  Without a token the client refuses before sending: the server decides whose
-  password it is from the token, and nothing in the body chooses that.
+  **Detalhes que custam caro se lidos errado**
 
-### Fixed
+  `/api/user/change-password`, e **não** `/api/change-password`: o router registra o
+  primeiro. O handler por trás do segundo é código morto marcado
+  `#[allow(dead_code)]`, e apontar para ele responde 404.
 
-- A malformed `groups` field in a server response no longer crashes the client.
-  `get_current_user` and `check_user` called `list(data["groups"])` on whatever
-  came back; a JSON `true`, a number, or `null` raised `TypeError: 'bool' object
-  is not iterable` out of the SDK, from a line that reads like a safe coercion.
-  Anything that is not a JSON array is now read as no groups. Found by the fuzz
-  suite, and it predates this release — `git stash` confirmed it on the previous
-  tag.
+  O servidor responde erro em **texto puro** (`e.to_string()`), não em JSON — quem
+  tratar como JSON recebe uma exceção de parsing no lugar da frase que explica o
+  que houve.
 
-### Security
+  O erro é **400**, não 401, e por isso vira `NetworkError`: é a classe que este
+  SDK já usa para tudo que não é 401/403/404. Trocá-la aqui mudaria o contrato de
+  todo chamador por causa de um endpoint. A frase do servidor sobrevive, que é o
+  que importa — "senha atual incorreta" e "senha muito curta" pedem ações opostas.
 
-- `pyjwt` 2.10.1 → 2.14.0 and `idna` 3.11 → 3.19 in the lockfile. Both are
-  runtime dependencies (`idna` arrives through `httpx`), and OSV reports known
-  advisories against the pinned versions — nine for `pyjwt`, four of them high.
-  The declared constraint was already `^2.9.0`, so this is a lockfile refresh
-  with no API change; the 194 tests pass unchanged.
+  Sem token, recusa **antes** de fazer a requisição: o servidor identifica quem
+  troca pelo token, e nada no corpo escolhe isso.
 
-### Removed
+  E o efeito que fecha o ciclo: o servidor limpa `first_login` ao trocar — a origem
+  do `requires_password_change` que o login reporta. Está na docstring porque quem
+  chama precisa saber que não há segunda chamada a fazer.
 
-- `towncrier` left the dev dependencies. It was declared and never configured:
-  no `[tool.towncrier]` section, no `newsfragments/` directory, and this
-  changelog was written by hand. A tool nobody runs still gets installed,
-  resolved, and audited on every environment build.
+  Verificado contra um Keyrunes de verdade, e não só com dublê: registrar, trocar,
+  e então a senha antiga recusada (401) e a nova aceita (200), com `first_login`
+  virando falso no banco.
+
+  5 testes de contrato; 194 da suíte passando. Pre-commit: black, isort, flake8,
+  mypy e pytest passam. **`safety` foi pulado** — ele falha pedindo login da
+  ferramenta, e medi que falha igual sem esta mudança (`git stash` e rodar).
+
+### Corrigido
+
+- **client**: conter `groups` malformado em vez de derrubar o cliente
+
+  O fuzzer do próprio repositório achou: com `{"groups": true}` na resposta do
+  servidor, a normalização estourava `TypeError: argument of type 'bool' is not a
+  container or iterable`.
+
+  `data.get("groups", []) or []` trata nulo e vazio, e **não** trata o resto:
+  `True or []` é `True`, que sobrevive até o `"admins" in groups` logo abaixo.
+
+  Um cliente que cai com resposta malformada é pior que um que a ignora: quem
+  consome o SDK vê uma exceção de tipo vinda de dentro da biblioteca, longe da
+  causa, e nada indica que o problema veio do servidor.
+
+  Preexistente — `git stash` e a falha continua. Detecção medida: repor o `or []`
+  reprova o teste de fuzz.
+
+- **deps**: pyjwt 2.10.1 → 2.14.0 e idna 3.11 → 3.19 (avisos OSV)
+
+  O hook `safety` não roda nesta máquina — pede login interativo e morre com
+  `EOF when reading a line`. Em vez de pular a checagem de segurança e seguir,
+  rodei as 90 versões travadas no `poetry.lock` contra a base OSV.
+
+  Dois achados na árvore de execução:
+
+  - `pyjwt` 2.10.1: nove avisos, quatro de severidade alta. Numa biblioteca de
+    autenticação isto é a dependência que mais importa. Corrigido em 2.13.0; o
+    `pyproject` já declarava `^2.9.0`, então nada muda de API — só o lock.
+  - `idna` 3.11: dois avisos moderados, corrigido em 3.15. Chega via `httpx`.
+
+  Depois da atualização a árvore de execução não tem nenhum aviso conhecido. Os
+  194 testes passam sem alteração.
+
+  O que sobra são avisos na árvore de desenvolvimento — `authlib`, `nltk`,
+  `cryptography`, `requests`, `urllib3` — e vale dizer de onde vêm: **todos são
+  dependências do próprio `safety`**. O scanner que não consegue rodar é também a
+  maior fonte de pacotes vulneráveis no ambiente. Não mexi neles: são de
+  desenvolvimento, não vão no pacote publicado, e resolver isso é decidir se o
+  `safety` fica.
+
+### Documentação
+
+- **changelog**: registrar em 0.4.0 os dois commits que caíram depois da tag
+
+  A tag `v0.4.0` ficou em `chore(release): 0.4.0`, e dois commits entraram depois
+  dela: o conserto do `groups` malformado e a saída do `towncrier`. Como a tag
+  **não foi publicada** (o remoto não a tem), o conserto ainda pode entrar na
+  0.4.0 em vez de exigir uma 0.4.1 — e deve, porque é um `TypeError` que sai do
+  SDK.
+
+- **changelog**: gerar o CHANGELOG.md com git-cliff, corpo do commit incluído
+
+  O changelog deste repositório era escrito à mão. A primeira tentativa de trocar
+  por geração automática foi medida e **descartada**: com o modelo padrão do
+  git-cliff, que usa só a linha de assunto, o arquivo caía de 246 para 61 linhas —
+  sobrava o "o quê" e sumia o "porquê".
+
+  O que resolve é incluir o **corpo** do commit. As mensagens daqui já explicam a
+  decisão, então a informação nunca esteve só no changelog: estava duplicada.
+  Agora o gerado tem 222 linhas, e cada entrada carrega o texto que a explica.
+
+  Três detalhes do `cliff.toml`, cada um por um defeito visto na saída:
+
+  - `indent(prefix="  ", first=true, blank=false)` no corpo. Sem `first=true` a
+    primeira linha do corpo fica fora do item da lista; com `blank=true` as linhas
+    vazias ganham dois espaços e o hook `trailing-whitespace` reprova o commit.
+  - Um postprocessor rebaixa a título em negrito qualquer `#` que venha dentro de
+    um corpo — indentado, ATX ainda é título (aceita até três espaços) e colidiria
+    com os níveis do changelog. O padrão usa `[ \t]` e **não** `\s`: `\s` casa
+    `\n`, e na primeira versão ele atravessou a quebra de linha e comeu o
+    `## [0.4.0]` do próprio changelog, que virou negrito.
+  - Outro postprocessor põe linha em branco antes de cada `## [versão]`, porque
+    `trim = true` cola o título na última linha da versão anterior.
+
+  Duas seções encolhem, e vale dizer quais: **0.1.0** (81 → 7 linhas) era um
+  inventário da API — o mesmo que o README já traz — e **0.3.0** (55 → 11) perde o
+  detalhe dos quatro bugs de contrato, porque o commit daquele release tem corpo
+  curto. O texto antigo continua recuperável: `git show 173721f:CHANGELOG.md`.
+  Daqui para a frente a regra é outra — o corpo do commit é a fonte, então
+  mensagem magra vira entrada magra.
+
+### Manutenção
+
+- **deps**: tirar o towncrier, que estava declarado e não configurado
+
+  `towncrier` era dependência de dev desde antes, **sem `[tool.towncrier]`** no
+  `pyproject.toml`, sem `towncrier.toml` e sem diretório de fragmentos. Rodá-lo
+  falha: "the config file does not contain 'version' or 'package'".
+
+  O `NEWS.rst` está no formato que ele *produziria*, o que é pior que não ter nada:
+  quem chega conclui que o arquivo é gerado e não mexe nele, ou tenta rodar a
+  ferramenta e descobre que não dá. Eu mesmo caí nisso hoje — escrevi o changelog à
+  mão sem perceber que havia ferramenta declarada.
+
+  Dependência declarada e não usada é a mesma família do código morto. O changelog
+  deste repositório é escrito à mão, e agora o `pyproject.toml` diz isso.
+
 
 ## [0.3.1] - 2026-09-04
 
-### Fixed
+### Corrigido
 
-- `mutmut` is no longer a runtime dependency. It was declared in
-  `[tool.poetry.dependencies]` instead of the dev group, so installing this SDK
-  pulled a mutation-testing tool and its whole tree — `libcst`, `textual`,
-  `rich`, `setproctitle`, `pyyaml-ft`, `markdown-it-py`, `mdit-py-plugins`,
-  `mdurl`, `linkify-it-py`, `sortedcontainers` — into every consumer, including
-  production images. Affected 0.2.0 and 0.3.0; nothing in the library imported
-  it, so upgrading only removes packages.
+- **deps**: move mutmut out of the runtime dependencies; release 0.3.1
+
+  mutmut was declared in [tool.poetry.dependencies] rather than the dev group,
+  so installing this SDK pulled a mutation-testing tool and its whole tree
+  (libcst, textual, rich, setproctitle, pyyaml-ft, markdown-it-py,
+  mdit-py-plugins, mdurl, linkify-it-py, sortedcontainers) into every consumer,
+  production images included.
+
+  Nothing in keyrunes_sdk imports it, so upgrading only removes packages. The
+  wheel now declares httpx, pydantic[email] and pyjwt and nothing else.
+
+  Affected 0.2.0 and 0.3.0.
+
 
 ## [0.3.0] - 2026-09-03
 
-### Added
+### Adicionado
 
-- `User.user_id`, carrying the internal identifier Keyrunes puts in the JWT
-  `sub` claim. It is a different value from `User.id` (the external UUID), and
-  a consumer that keys its own records off `sub` needs it; before this release
-  it was discarded during normalization and could only be recovered by
-  re-parsing the token.
-- `User.namespace`, `User.organization_id` and `User.first_login`, all of which
-  the server returns and normalization used to drop.
-- `Token.requires_password_change`, so a login that must be followed by a
-  password change can be detected without reading the raw response.
-- `KeyrunesClient.refresh_token()`, wrapping `POST /api/refresh-token`. It
-  accepts an explicit token or falls back to the client's current one, raises
-  `InvalidTokenError` when neither is available, and adopts the refreshed
-  token the way `login()` does.
-- `get_current_user(force_refresh=True)`, which always asks the server. The
-  claims shortcut reads a token the SDK never verified, so it cannot answer
-  "is this token still accepted"; a caller validating a token needs the round
-  trip.
-- `KeyrunesError.status_code`, carrying the HTTP status when the error came
-  from a response rather than from the transport. Without it a caller cannot
-  tell "the server refused this request" (4xx) from "the server or the network
-  failed" (5xx, or no response at all), and both are raised as `NetworkError`.
-- `register_user(group=...)`, sent as a top-level field.
-- A `py.typed` marker (PEP 561). The package was already fully typed, but
-  without the marker a consumer running mypy saw every SDK import as
-  untyped.
+- **client**: carry the full server identity and add refresh; release 0.3.0
 
-### Fixed
+  Migrating a real consumer (an LMS keying its user rows off the JWT `sub`)
+  surfaced four contract bugs against a live Keyrunes server and three fields
+  the SDK was discarding.
 
-- `get_current_user()` asked for `/api/users/me`, which the Keyrunes router
-  does not expose — the real route is `/api/me`, so the call answered 404
-  against a live server whenever the claims shortcut did not cover it. The
-  endpoint is now a named constant, `ENDPOINT_ME`.
-- `register_user()` and `register_admin()` required the response to be
-  `{"user": {...}}`, but `POST /api/register` answers with the bare user
-  object. Every registration against a real server failed with "Unexpected
-  response format". Both shapes are now accepted.
-- Extra keyword arguments to `register_user()` were nested under `attributes`,
-  so a `group` never reached the server, which reads it as a top-level field.
-  `group` is now an explicit parameter placed at the top level; other keyword
-  attributes keep nesting under `attributes`.
-
-### Testing
-
-- Test count raised from 159 to 189.
-
-### Notes
-
-- Every added field is optional with a backwards-compatible default, and
-  `User.id` keeps its existing precedence (`id` → `user_id` → `external_id`).
-  Code written against 0.2.0 keeps working unchanged.
 
 ## [0.2.0] - 2026-09-03
 
-### Added
+### Adicionado
 
-- Property-based test suite (`tests/test_property_based.py`, 24 tests) built on
-  Hypothesis, covering base URL normalization, `_normalize_user` id precedence
-  and `is_admin` derivation, JWT claim parsing, request URL construction, HTTP
-  status to exception mapping, and model validation bounds.
-- Input fuzzing ("spider") suite (`tests/test_fuzz.py`, 19 tests) that crawls the
-  public surface with hostile payloads and asserts that only `KeyrunesError` and
-  pydantic `ValidationError` ever escape, and that nothing panics or leaks a raw
-  `ValueError`/`TypeError`.
-- Request contract suite (`tests/test_request_contract.py`, 33 tests) that mocks
-  only the httpx transport, so the method, URL, headers and JSON body actually
-  put on the wire are asserted for every endpoint.
-- Hypothesis profiles in `tests/conftest.py` (`fast`, `dev`, `ci`) selected via
-  the `HYPOTHESIS_PROFILE` environment variable. `fast` is derandomized and
-  database-free so mutation runs judge every mutant against identical examples.
-- `[tool.mutmut]` configuration in `pyproject.toml` for mutation testing.
-- `hypothesis` added as a development dependency.
+- **tests**: add property-based, fuzz and contract suites; release 0.2.0
 
-### Fixed
+  Add three new test suites and the tooling to measure them:
 
-- A 2xx response carrying a non-JSON body raised a raw `ValueError` out of
-  `KeyrunesClient._make_request`. It is now wrapped in `NetworkError`, so the
-  documented exception contract holds for malformed responses.
+  - tests/test_property_based.py (24 tests): Hypothesis invariants over base
+    URL normalization, _normalize_user id precedence and is_admin derivation,
+    JWT claim parsing, request URL construction, status-to-exception mapping
+    and model validation bounds.
+  - tests/test_fuzz.py (19 tests): hostile-input crawl of the public surface
+    asserting only KeyrunesError and pydantic ValidationError ever escape.
+  - tests/test_request_contract.py (33 tests): mocks only the httpx transport
+    so the method, URL, headers and JSON body put on the wire are asserted.
 
-### Changed
+  Hypothesis profiles (fast/dev/ci) are selected with HYPOTHESIS_PROFILE;
+  fast is derandomized and database-free so mutmut judges every mutant
+  against identical examples.
 
-- Extracted the duplicated "build a `User` from JWT claims" block into
-  `KeyrunesClient._user_from_token_claims()`.
+  Two defects the new suites uncovered are fixed:
 
-### Removed
+  - A 2xx response with a non-JSON body raised a raw ValueError out of
+    _make_request. It is now wrapped in NetworkError.
+  - get_user, get_current_user and has_group carried unreachable
+    "except UserNotFoundError" fallbacks that re-tested a condition already
+    forced by an early return, swallowing genuine server 404s. Removed, and
+    the duplicated claims-to-User block extracted into
+    _user_from_token_claims().
 
-- Unreachable `except UserNotFoundError` fallbacks in `get_user`,
-  `get_current_user` and `has_group`. Each re-tested a condition that had
-  already forced an early return, so a 404 from the server was being swallowed
-  instead of propagated.
+### Manutenção
 
-### Testing
+- add changelogs
 
-- Test count raised from 83 to 159.
-- Mutation score (mutmut) raised from 44% (294/669 mutants killed) to 72%
-  (387/537). The remaining survivors are predominantly equivalent mutants that
-  only alter error message prose.
+- update lib version in pyproject
 
-## [0.1.0] - 2025-12-03
+- add pypi url in README
+
+
+## [0.1.0] - 2026-01-03
 
 ### Adicionado
 
-#### Funcionalidades Core
-- Cliente `KeyrunesClient` completo para interação com Keyrunes API
-- Autenticação com login de usuário e admin
-- Registro de usuário e admin com validação
-- Verificação de pertencimento a grupos
-- Obtenção de informações de usuários
+- add organization key for keyrunes v0.2.0
 
-#### Decorators
-- `@require_group()` - Decorator para verificar grupos de usuários
-- `@require_admin()` - Decorator para verificar privilégios de admin
-- Suporte para múltiplos grupos (ANY ou ALL)
-- Sistema de client global para uso sem passar client explicitamente
 
-#### Modelos Pydantic
-- `User` - Modelo de usuário com validação
-- `Token` - Modelo de token JWT
-- `Group` - Modelo de grupo
-- `UserRegistration` - Dados de registro de usuário
-- `AdminRegistration` - Dados de registro de admin
-- `LoginCredentials` - Credenciais de login
-- `GroupCheck` - Resultado de verificação de grupo
+## [0.0.1] - 2025-12-08
 
-#### Exceções Customizadas
-- `KeyrunesError` - Exceção base
-- `AuthenticationError` - Erro de autenticação
-- `AuthorizationError` - Erro de autorização
-- `GroupNotFoundError` - Grupo não encontrado
-- `UserNotFoundError` - Usuário não encontrado
-- `InvalidTokenError` - Token inválido
-- `NetworkError` - Erro de rede
+### Adicionado
 
-#### Sistema de Configuração Global
-- `configure()` - Configura client global
-- `get_global_client()` - Obtém client global
-- `clear_global_client()` - Limpa client global
-- Thread-safe com Lock
+- add login, register, check_admin, check_user, get_current_user features
 
-#### Desenvolvimento e Testes
-- Docker Compose completo com Keyrunes, PostgreSQL e Redis
-- 78 testes com 99% de cobertura
-- Testes usando pytest, factory-boy e faker
-- Exemplos práticos de uso
-- Makefile com comandos úteis
-- Configuração completa de CI/CD
+### Corrigido
 
-#### Documentação
-- README.md completo com exemplos
-- TESTING.md com guia de testes
-- Docstrings em todas as funções
-- Type hints completos
-- Exemplos práticos em `examples/`
+- fix lib version
 
-### Detalhes Técnicos
+### Infraestrutura
 
-- Python 3.8.1+ compatível
-- Gerenciamento com Poetry
-- Validação com Pydantic 2.0
-- Type hints completos
-- Thread-safe
-- Context manager support
+- fix lint errors and add pre-commit
 
-### Testes
+### Manutenção
 
-- 78 testes implementados
-- 99% de cobertura de código
-- Testes unitários e de integração
-- Factories com factory-boy
-- Dados fake com Faker
+- add changelogs
 
-### Ferramentas de Desenvolvimento
+### Outros
 
-- Black para formatação
-- isort para organização de imports
-- flake8 para linting
-- mypy para type checking
-- pytest para testes
+- Initial commit
 
-## [Unreleased]
 
-### Planejado
-
-- Suporte para refresh token automático
-- Cache de verificações de grupo
-- Suporte para OIDC
-- Integração com FastAPI
-- Integração com Flask
-- Integração com Django
-- Mais exemplos práticos
-- Documentação com Sphinx
-- Publicação no PyPI
-
----
-
-Para mais detalhes sobre cada versão, veja os [releases no GitHub](https://github.com/jonatasoli/keyurnes-sdk-python-dark/releases).
+<!-- gerado por git-cliff -->
