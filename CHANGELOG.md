@@ -33,6 +33,23 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
   Without a token the client refuses before sending: the server decides whose
   password it is from the token, and nothing in the body chooses that.
 
+### Fixed
+
+- A malformed `groups` field in a server response no longer crashes the client.
+  `get_current_user` and `check_user` called `list(data["groups"])` on whatever
+  came back; a JSON `true`, a number, or `null` raised `TypeError: 'bool' object
+  is not iterable` out of the SDK, from a line that reads like a safe coercion.
+  Anything that is not a JSON array is now read as no groups. Found by the fuzz
+  suite, and it predates this release — `git stash` confirmed it on the previous
+  tag.
+
+### Removed
+
+- `towncrier` left the dev dependencies. It was declared and never configured:
+  no `[tool.towncrier]` section, no `newsfragments/` directory, and this
+  changelog was written by hand. A tool nobody runs still gets installed,
+  resolved, and audited on every environment build.
+
 ## [0.3.1] - 2026-09-04
 
 ### Fixed
