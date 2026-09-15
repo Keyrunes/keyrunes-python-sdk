@@ -1,3 +1,23 @@
+0.4.0 (2026-09-15)
+==================
+
+Features
+--------
+
+- ``KeyrunesClient.change_password(current_password, new_password)`` wraps
+  ``POST /api/user/change-password``. The server always served it; the SDK did
+  not expose it, so callers built the HTTP request by hand — or, worse,
+  concluded from the SDK's surface that the operation did not exist.
+
+  The endpoint answers errors as **plain text** with status **400**, so this
+  raises ``NetworkError`` (the class this client already uses for every
+  non-401/403/404 status) carrying the server's own wording: "invalid current
+  password" and "password too short" call for opposite fixes.
+
+  Changing the password also clears the account's ``first_login`` flag
+  server-side, which is what ``requires_password_change`` reports at login.
+  There is no second call to make.
+
 0.3.1 (2026-09-04)
 ==================
 
