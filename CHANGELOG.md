@@ -5,6 +5,34 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.4.0] - 2026-09-15
+
+### Added
+
+- `KeyrunesClient.change_password(current_password, new_password)`, wrapping
+  `POST /api/user/change-password`. The server has served this endpoint all
+  along; the SDK exposed `login`, `refresh_token`, `register_user` and the group
+  queries, and not this one. Anyone who needed it built the HTTP call by hand —
+  which is what happened downstream, after first concluding from the SDK's
+  surface that the operation did not exist at all.
+
+  Three details the endpoint carries, and each one bites if read wrong:
+
+  - it lives at `/api/user/change-password`, **not** `/api/change-password` —
+    the router registers the first, and the handler behind the second is dead
+    code marked `#[allow(dead_code)]`, so pointing at it answers 404;
+  - it answers errors as **plain text** (`e.to_string()`), not JSON, and with
+    status **400** rather than 401 — so this client raises `NetworkError`, the
+    same class it already uses for every non-401/403/404 status, and preserves
+    the server's own wording, because "invalid current password" and "password
+    too short" call for opposite fixes;
+  - changing the password clears the account's `first_login` flag server-side,
+    which is what `requires_password_change` reports at login. There is no
+    second call to make.
+
+  Without a token the client refuses before sending: the server decides whose
+  password it is from the token, and nothing in the body chooses that.
+
 ## [0.3.1] - 2026-09-04
 
 ### Fixed
