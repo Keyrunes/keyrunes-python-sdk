@@ -43,6 +43,14 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
   suite, and it predates this release — `git stash` confirmed it on the previous
   tag.
 
+### Security
+
+- `pyjwt` 2.10.1 → 2.14.0 and `idna` 3.11 → 3.19 in the lockfile. Both are
+  runtime dependencies (`idna` arrives through `httpx`), and OSV reports known
+  advisories against the pinned versions — nine for `pyjwt`, four of them high.
+  The declared constraint was already `^2.9.0`, so this is a lockfile refresh
+  with no API change; the 194 tests pass unchanged.
+
 ### Removed
 
 - `towncrier` left the dev dependencies. It was declared and never configured:
