@@ -182,7 +182,14 @@ class KeyrunesClient:
         )
         normalized["username"] = data.get("username", "")
         normalized["email"] = data.get("email", "")
-        normalized["groups"] = data.get("groups", []) or []
+        # `or []` trata nulo e vazio, e **não** trata o resto: com
+        # ``{"groups": true}`` o valor sobrevivia como ``True``, e o
+        # ``"admins" in groups`` logo abaixo estourava ``TypeError`` — o cliente
+        # caía em vez de conter uma resposta malformada. Achado pelo fuzzer.
+        raw_groups = data.get("groups")
+        normalized["groups"] = (
+            list(raw_groups) if isinstance(raw_groups, list) else []
+        )
         normalized["attributes"] = data.get("attributes", {})
         normalized["is_active"] = data.get("is_active", True)
         groups = normalized["groups"]
