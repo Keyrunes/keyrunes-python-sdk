@@ -501,6 +501,81 @@ class TestIdentityFieldsSurviveNormalization:
         )
 
 
+class TestChangePassword:
+    """``POST /api/user/change-password`` troca a senha de quem o token diz ser.
+
+    Estava de fora do SDK enquanto a API já servia — quem precisava dela teve
+    de montar o HTTP à mão, e foi o que aconteceu no LMS.
+
+    O servidor responde erro em **texto puro** (``e.to_string()``), e não em
+    JSON: quem tratar como JSON recebe uma exceção de parsing no lugar da frase
+    que explica o que houve.
+    """
+
+    def test_posts_both_passwords_to_the_endpoint(self):
+        client = _client_with_transport(
+            {"message": "Password changed successfully"}
+        )
+        client.set_token(JWT)
+
+        client.change_password("atual", "nova-senha-123")
+
+        sent = _sent(client)
+        assert sent["method"] == "POST"
+        assert sent["url"] == f"{BASE_URL}/api/user/change-password"
+        assert sent["json"] == {
+            "current_password": "atual",
+            "new_password": "nova-senha-123",
+        }
+
+    def test_it_goes_authenticated(self):
+        """Quem troca é quem o token diz — nada no corpo escolhe isso.
+
+        Se escolhesse, trocar a própria senha seria trocar a de qualquer um.
+        """
+        client = _client_with_transport({"message": "ok"})
+        client.set_token(JWT)
+
+        client.change_password("atual", "nova-senha-123")
+
+        assert _sent(client)["headers"]["Authorization"] == f"Bearer {JWT}"
+
+    def test_without_a_token_it_refuses_before_the_request(self):
+        client = _client_with_transport({"message": "ok"})
+
+        with pytest.raises(InvalidTokenError):
+            client.change_password("atual", "nova-senha-123")
+
+        client._client.request.assert_not_called()
+
+    def test_a_wrong_current_password_raises(self):
+        """O servidor responde **400**, não 401, e o SDK mapeia 400 para
+        ``NetworkError``.
+
+        A classe é a que este SDK já usa para tudo que não é 401/403/404 —
+        trocá-la aqui seria mudar o contrato de todo chamador por causa de um
+        endpoint. O que importa para quem digitou é a frase, e ela sobrevive.
+        """
+        client = _client_with_transport(None, status=400)
+        client._client.request.return_value.text = "Invalid current password"
+        client.set_token(JWT)
+
+        with pytest.raises(NetworkError, match="Invalid current password"):
+            client.change_password("errada", "nova-senha-123")
+
+    def test_the_server_phrase_survives(self):
+        """ "Senha atual incorreta" e "senha muito curta" pedem ações opostas.
+
+        Uma mensagem genérica manda quem digitou tentar de novo a coisa errada.
+        """
+        client = _client_with_transport(None, status=400)
+        client._client.request.return_value.text = "password too short"
+        client.set_token(JWT)
+
+        with pytest.raises(NetworkError, match="password too short"):
+            client.change_password("atual", "curta")
+
+
 class TestRefreshToken:
     """``POST /api/refresh-token`` exchanges a live token for a fresh one."""
 
