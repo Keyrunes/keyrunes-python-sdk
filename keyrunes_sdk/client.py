@@ -182,10 +182,11 @@ class KeyrunesClient:
         )
         normalized["username"] = data.get("username", "")
         normalized["email"] = data.get("email", "")
-        # `or []` trata nulo e vazio, e **não** trata o resto: com
-        # ``{"groups": true}`` o valor sobrevivia como ``True``, e o
-        # ``"admins" in groups`` logo abaixo estourava ``TypeError`` — o cliente
-        # caía em vez de conter uma resposta malformada. Achado pelo fuzzer.
+        # `or []` handles null and empty and **nothing else**: with
+        # ``{"groups": true}`` the value survived as ``True``, and the
+        # ``"admins" in groups`` just below raised ``TypeError`` — the client
+        # fell over instead of containing a malformed response. Found by the
+        # fuzz suite.
         raw_groups = data.get("groups")
         normalized["groups"] = (
             list(raw_groups) if isinstance(raw_groups, list) else []
