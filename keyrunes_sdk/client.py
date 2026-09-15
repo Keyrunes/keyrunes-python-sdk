@@ -35,6 +35,13 @@ ENDPOINT_ME = "/api/me"
 #: Exchanges a still-valid token for a fresh one.
 ENDPOINT_REFRESH_TOKEN = "/api/refresh-token"
 
+#: Changes the password of whoever the bearer token identifies.
+#:
+#: ``/api/user/change-password``, and not ``/api/change-password``: the router
+#: registers the first, and the handler behind the second is dead code marked
+#: ``#[allow(dead_code)]``. Pointing at it answers 404.
+ENDPOINT_CHANGE_PASSWORD = "/api/user/change-password"
+
 
 class KeyrunesClient:
     """
@@ -626,6 +633,49 @@ class KeyrunesClient:
         # so adopt it the way login() does.
         self.set_token(refreshed.access_token)
         return refreshed
+
+    def change_password(self, current_password: str, new_password: str) -> None:
+        """
+        Change the password of whoever the current token identifies.
+
+        The server also clears the account's ``first_login`` flag, which is
+        what ``requires_password_change`` reports at login: changing the
+        password here puts that warning away without a second call.
+
+        Nothing in the body says whose password it is — the token does. A body
+        that chose would make "change my password" mean "change anyone's".
+
+        Args:
+            current_password: The password being replaced. The server checks
+                it before accepting the change.
+            new_password: The new password. The server requires at least 8
+                characters and answers 400 when it is shorter.
+
+        Raises:
+            InvalidTokenError: If the client has no token set
+            NetworkError: If the server refuses — wrong current password, or a
+                new password it will not accept. The server answers **400** for
+                both, which this client maps to ``NetworkError`` like any
+                other non-401/403/404 status. The server's wording survives,
+                because "invalid current password" and "password too short" call
+                for opposite fixes.
+
+        Example:
+            >>> client = KeyrunesClient("https://keyrunes.example.com")
+            >>> client.set_token("eyJhbGciOiJIUzI1NiIs...")
+            >>> client.change_password("old-secret", "a-longer-new-secret")
+        """
+        if not self._token:
+            raise InvalidTokenError("No token available to change a password.")
+
+        self._make_request(
+            "POST",
+            ENDPOINT_CHANGE_PASSWORD,
+            data={
+                "current_password": current_password,
+                "new_password": new_password,
+            },
+        )
 
     def clear_token(self) -> None:
         """
