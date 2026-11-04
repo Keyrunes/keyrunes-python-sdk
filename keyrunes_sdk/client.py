@@ -416,7 +416,7 @@ class KeyrunesClient:
         """
         Register a new admin user.
 
-        .. deprecated:: 0.2.2
+        .. deprecated:: 0.5.0
             Since Keyrunes server 0.4.2 (C11-008 remediation) ``POST
             /api/register`` **ignores** ``admin_key`` and never promotes the
             registrant: the endpoint only ever creates a normal user.
