@@ -3,7 +3,7 @@
 from functools import wraps
 from typing import Any, Callable, Optional
 
-from keyrunes_sdk.client import KeyrunesClient
+from keyrunes_sdk.client import PRIVILEGED_GROUPS, KeyrunesClient
 from keyrunes_sdk.exceptions import AuthorizationError, UserNotFoundError
 
 
@@ -218,11 +218,14 @@ def require_admin(
                     if keyrunes_client._token_data
                     else []
                 )
-                is_admin = (
-                    "admins" in groups
-                    or "superadmin" in groups
-                    or any("admin" in str(g).lower() for g in groups)
-                )
+                # Exact membership only. The old heuristic treated ANY
+                # group whose name contained the substring "admin"
+                # ("non-admin", "billing-admin-viewer") as admin — a
+                # group-name collision silently granted privileges.
+                # KeyRunes' own names are "admin" and "superadmin";
+                # "admins" is kept because deployments and the SDK
+                # fixtures historically use it.
+                is_admin = any(g in PRIVILEGED_GROUPS for g in groups)
                 if not is_admin:
                     raise AuthorizationError(
                         f"User '{user_id}' does not have admin privileges."

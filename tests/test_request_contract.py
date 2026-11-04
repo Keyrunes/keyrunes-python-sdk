@@ -249,12 +249,24 @@ class TestTokenShortcutBranches:
         client._client.request.assert_not_called()
         client.close()
 
-    def test_has_group_for_self_is_answered_from_the_token(self) -> None:
-        client = _client_with_transport({})
+    def test_has_group_for_self_is_verified_against_the_server(self) -> None:
+        """The token's own claims are unsigned, so answering group checks
+        from them let a forged token pick its groups. ``has_group`` for the
+        authenticated user must ask ``/api/me`` instead."""
+        me = {
+            "user_id": "user123",
+            "username": "john",
+            "email": "john@example.com",
+            "groups": ["users"],
+        }
+        client = _client_with_transport(me)
         client.set_token(JWT)
         assert client.has_group("user123", "users") is True
         assert client.has_group("user123", "admins") is False
-        client._client.request.assert_not_called()
+        assert client._client.request.call_count == 2
+        sent = _sent(client)
+        assert sent["method"] == "GET"
+        assert sent["url"].endswith("/api/me")
         client.close()
 
     def test_get_user_groups_without_id_uses_the_current_user(self) -> None:
