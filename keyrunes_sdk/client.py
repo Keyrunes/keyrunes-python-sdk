@@ -2,7 +2,6 @@
 
 import os
 from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin
 
 import httpx
 import jwt
@@ -133,7 +132,7 @@ class KeyrunesClient:
             AuthenticationError: If authentication fails (401)
             AuthorizationError: If authorization fails (403)
         """
-        url = urljoin(self.base_url + "/", endpoint.lstrip("/"))
+        url = f"{self.base_url}/{endpoint.lstrip('/')}"
         request_headers: Dict[str, str] = dict(headers or {})
 
         if use_auth and self._token and "Authorization" not in request_headers:
