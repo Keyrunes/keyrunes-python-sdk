@@ -199,17 +199,21 @@ class TestNormalizeUserInvariants:
             "is_admin": flag,
         }
         user = KeyrunesClient._normalize_user(payload)
-        expected = flag or any("admin" in str(g).lower() for g in groups)
+        expected = flag or any(
+            g in ("admin", "admins", "superadmin") for g in groups
+        )
         assert user.is_admin is expected
 
     @given(
         groups=st.lists(group_names, min_size=1, max_size=6), email=st.emails()
     )
     @PROPERTY_SETTINGS
-    def test_any_group_containing_admin_grants_admin(
+    def test_substring_admin_names_do_not_grant_admin(
         self, groups: list, email: str
     ) -> None:
-        assume(not any("admin" in g.lower() for g in groups))
+        """`Platform-ADMIN-team` used to grant admin through the substring
+        heuristic; the exact-set contract says only the privileged names do."""
+        assume(not any(g in ("admin", "admins", "superadmin") for g in groups))
         payload = {
             "id": "u1",
             "username": "u",
@@ -218,7 +222,7 @@ class TestNormalizeUserInvariants:
             "is_admin": False,
         }
         user = KeyrunesClient._normalize_user(payload)
-        assert user.is_admin is True
+        assert user.is_admin is False
 
     @given(email=st.emails())
     @PROPERTY_SETTINGS
@@ -412,7 +416,7 @@ class TestModelValidationBounds:
         registration = UserRegistration(
             username=username, email=email, password=password
         )
-        assert registration.namespace == "default"
+        assert registration.namespace == "public"
         assert registration.username == username
 
     @given(

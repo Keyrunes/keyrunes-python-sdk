@@ -42,6 +42,12 @@ ENDPOINT_REFRESH_TOKEN = "/api/refresh-token"
 #: ``#[allow(dead_code)]``. Pointing at it answers 404.
 ENDPOINT_CHANGE_PASSWORD = "/api/user/change-password"
 
+#: Group names that carry administrative rights in the Keyrunes server.
+#: Matching is EXACT: a substring test ("admin" in g.lower()) used to treat
+#: "non-admin" or "billing-admin-viewer" as privileged — a user created in
+#: any such group passed ``@require_admin``.
+PRIVILEGED_GROUPS = frozenset({"admin", "admins", "superadmin"})
+
 
 class KeyrunesClient:
     """
@@ -102,6 +108,7 @@ class KeyrunesClient:
         data: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
         use_auth: bool = True,
+        headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """
         Make HTTP request to Keyrunes API.
@@ -112,6 +119,11 @@ class KeyrunesClient:
             data: Request body data
             params: Query parameters
             use_auth: Whether to include authentication header
+            headers: Extra per-call headers. An ``Authorization`` given here
+                wins over the stored client token — used by
+                ``refresh_token``, which must authenticate with the token
+                being exchanged even when the client already holds another
+                one.
 
         Returns:
             Response JSON data
@@ -122,10 +134,10 @@ class KeyrunesClient:
             AuthorizationError: If authorization fails (403)
         """
         url = urljoin(self.base_url + "/", endpoint.lstrip("/"))
-        headers = {}
+        request_headers: Dict[str, str] = dict(headers or {})
 
-        if use_auth and self._token:
-            headers["Authorization"] = f"Bearer {self._token}"
+        if use_auth and self._token and "Authorization" not in request_headers:
+            request_headers["Authorization"] = f"Bearer {self._token}"
 
         try:
             response = self._client.request(
@@ -133,7 +145,7 @@ class KeyrunesClient:
                 url=url,
                 json=data,
                 params=params,
-                headers=headers,
+                headers=request_headers,
             )
 
             if response.status_code == 401:
@@ -195,10 +207,13 @@ class KeyrunesClient:
         normalized["is_active"] = data.get("is_active", True)
         groups = normalized["groups"]
         is_admin_flag = data.get("is_admin", False)
-        has_admin_group = "admins" in groups or "superadmin" in groups
-        has_admin_in_name = any("admin" in str(g).lower() for g in groups)
-        normalized["is_admin"] = (
-            is_admin_flag or has_admin_group or has_admin_in_name
+        # Exact membership only. The previous heuristic (`"admin" in
+        # str(g).lower()`) granted admin privileges to any group whose name
+        # merely *contained* "admin" — "non-admin", "billing-admin-viewer"
+        # and friends all unlocked @require_admin. "admins" stays in the set
+        # because server fixtures still seed that legacy spelling.
+        normalized["is_admin"] = bool(is_admin_flag) or any(
+            isinstance(g, str) and g in PRIVILEGED_GROUPS for g in groups
         )
         # Carried through untouched so a caller can key its own records off the
         # same identifier the JWT ``sub`` uses, rather than off ``id``.
@@ -401,6 +416,16 @@ class KeyrunesClient:
         """
         Register a new admin user.
 
+        .. deprecated:: 0.2.2
+            Since Keyrunes server 0.4.2 (C11-008 remediation) ``POST
+            /api/register`` **ignores** ``admin_key`` and never promotes the
+            registrant: the endpoint only ever creates a normal user.
+            Administrators must be created through an authenticated
+            ``POST /api/admin/user`` (with the caller's JWT) or through the
+            server's CLI bootstrap. This method is kept so existing code
+            still calls a registered endpoint, but do not expect the
+            returned user to hold any privilege.
+
         Args:
             username: Username (3-50 characters)
             email: Admin email address
@@ -472,10 +497,17 @@ class KeyrunesClient:
         )
 
         if token_user_id and str(user_id) == token_user_id:
-            groups = (
-                self._token_data.get("groups", []) if self._token_data else []
-            )
-            return group_id in groups
+            # SECURITY: the JWT held by this client was decoded with
+            # ``verify_signature=False`` — anyone can mint one claiming any
+            # group. The claims said nothing about whether the server still
+            # accepts this token, so the answer comes from ``/api/me``,
+            # which only a live, valid token can query. Fail closed: a 404
+            # from the server means no access, it does not raise.
+            try:
+                user = self.get_current_user(force_refresh=True)
+            except UserNotFoundError:
+                return False
+            return group_id in user.groups
 
         try:
             response = self._make_request(
@@ -629,11 +661,15 @@ class KeyrunesClient:
         if not current:
             raise InvalidTokenError("No token available to refresh.")
 
+        # The server binds the refreshed identity to the token in the
+        # Authorization header (require_jwt middleware) and ignores the body
+        # since the 0.4.1 fix. Authenticate with the token being exchanged.
         response = self._make_request(
             "POST",
             ENDPOINT_REFRESH_TOKEN,
             data={"token": current},
             use_auth=False,
+            headers={"Authorization": f"Bearer {current}"},
         )
 
         refreshed = self._parse_token_response(response)

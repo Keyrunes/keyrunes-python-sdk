@@ -376,7 +376,12 @@ class TestClientGroupManagement:
     """Tests for group management methods."""
 
     def test_has_group_true(self, mock_client: KeyrunesClient) -> None:
-        """Test checking group membership - user has group."""
+        """Test checking group membership - user has group.
+
+        The self-branch verifies against the server (``GET /api/me``)
+        rather than trusting the unsigned claims of a locally-decoded
+        JWT, so the mocked response is a user payload.
+        """
         mock_client._token = "test-token"
         mock_client._token_data = {
             "sub": "user123",
@@ -386,16 +391,22 @@ class TestClientGroupManagement:
         }
         mock_client._make_request.return_value = {
             "user_id": "user123",
-            "group_id": "admins",
-            "has_access": True,
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "groups": ["admins"],
         }
 
         result = mock_client.has_group("user123", "admins")
 
         assert result is True
+        mock_client._make_request.assert_called_with("GET", "/api/me")
 
     def test_has_group_false(self, mock_client: KeyrunesClient) -> None:
-        """Test checking group membership - user doesn't have group."""
+        """Test checking group membership - user doesn't have group.
+
+        Same server-verified self-branch: ``/api/me`` answers without
+        the checked group.
+        """
         mock_client._token = "test-token"
         mock_client._token_data = {
             "sub": "user123",
@@ -405,12 +416,33 @@ class TestClientGroupManagement:
         }
         mock_client._make_request.return_value = {
             "user_id": "user123",
-            "group_id": "admins",
-            "has_access": False,
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "groups": [],
         }
 
         result = mock_client.has_group("user123", "admins")
 
+        assert result is False
+        mock_client._make_request.assert_called_with("GET", "/api/me")
+
+    def test_has_group_fails_closed_when_server_denies(
+        self, mock_client: KeyrunesClient
+    ) -> None:
+        """A server that cannot answer the self-lookup means no access.
+
+        Previously the claims path could answer ``True`` from a forged
+        token; now only ``/api/me`` answers, and an authentication
+        failure propagates instead of defaulting to a claim.
+        """
+        mock_client._token = "test-token"
+        mock_client._token_data = {
+            "sub": "user123",
+            "groups": ["superadmin"],
+        }
+        mock_client._make_request.side_effect = UserNotFoundError("gone")
+
+        result = mock_client.has_group("user123", "superadmin")
         assert result is False
 
     def test_has_group_not_found(self, mock_client: KeyrunesClient) -> None:
