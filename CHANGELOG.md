@@ -7,7 +7,36 @@ becomes the text of its entry. **Do not edit by hand**: the next run overwrites
 it. To change an entry, reword the commit message (`git rebase -i`); to change
 the shape, edit `cliff.toml` and run `poetry run task changelog`.
 
-## [unreleased]
+## [0.5.0] - 2026-11-04
+
+### Fixed
+
+- **security**: verify self group checks against the server and pin the privileged-group set (reported by Rathnadeepan / HotWater @HotWater-015)
+
+  has_group used to answer for the authenticated user straight from the
+  JWT claims the client decoded with verify_signature=False, so a forged
+  token granted any group locally. Self checks now hit GET /api/me with
+  the bearer token and fail closed. The is_admin heuristic that granted
+  admin to any group whose name merely contained 'admin' (e.g.
+  'non-admin') is replaced by exact membership in
+  {admin, admins, superadmin}. refresh_token now sends the Authorization
+  header the server's require_jwt middleware needs (it was 401 on every
+  call). Registration/login model defaults move from 'default' to the
+  server's actual default namespace 'public'. register_admin documents
+  that server >= 0.4.2 ignores admin_key at /api/register.
+
+- **security**: build the request URL from the base instead of joining it
+
+  urljoin() lets a second argument that looks like a URL replace the base
+  completely: an endpoint of "A:" produced the relative URL "A:" and an
+  endpoint of "https://elsewhere.test/x" would have sent the request (and
+  the Authorization header) to another host. The URL is now built from the
+  configured base and the endpoint path, so an endpoint can never point the
+  request somewhere else.
+
+  The fuzz suite caught it: hypothesis stores the failing example, so the
+  invariant "an arbitrary endpoint still yields an absolute URL" is now
+  pinned by a regression test.
 
 ### Documentation
 
@@ -31,6 +60,12 @@ the shape, edit `cliff.toml` and run `poetry run task changelog`.
   One thing changes besides the language: a `.*` catch-all parser. Without it a
   commit that follows no convention is dropped without a trace, and a changelog
   that looks complete while omitting work is the failure worth guarding against.
+
+- **client**: point the register_admin deprecation at the 0.5.0 release
+
+  The docstring still advertised 0.2.2, a version that never shipped the
+  deprecation. The method is deprecated since the release that carries the
+  server 0.4.2 hardening.
 
 
 ## [0.4.0] - 2026-09-15
