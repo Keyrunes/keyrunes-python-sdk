@@ -7,6 +7,18 @@ becomes the text of its entry. **Do not edit by hand**: the next run overwrites
 it. To change an entry, reword the commit message (`git rebase -i`); to change
 the shape, edit `cliff.toml` and run `poetry run task changelog`.
 
+## [0.5.1] - 2026-11-09
+
+### Added
+
+- **client**: add optional reCAPTCHA response to login and registration
+
+  Forward an optional Google reCAPTCHA response token per request through a
+  new ``recaptcha_response`` keyword on ``login`` and ``register_user``. The
+  token is only serialized when provided, so existing callers are unaffected
+  and no shared mutable state is introduced.
+
+
 ## [0.5.0] - 2026-11-04
 
 ### Fixed
@@ -66,6 +78,10 @@ the shape, edit `cliff.toml` and run `poetry run task changelog`.
   The docstring still advertised 0.2.2, a version that never shipped the
   deprecation. The method is deprecated since the release that carries the
   server 0.4.2 hardening.
+
+- **changelog**: cut the 0.5.0 release section with git-cliff
+
+  Regenerated from the conventional commits of the 0.5.0 release.
 
 
 ## [0.4.0] - 2026-09-15
