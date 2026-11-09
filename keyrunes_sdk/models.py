@@ -91,6 +91,9 @@ class UserRegistration(BaseModel):
     attributes: Dict[str, Any] = Field(
         default_factory=dict, description="Additional attributes"
     )
+    recaptcha_response: Optional[str] = Field(
+        default=None, description="Google reCAPTCHA response token"
+    )
 
 
 class AdminRegistration(UserRegistration):
@@ -106,13 +109,25 @@ class LoginCredentials(BaseModel):
     password: str = Field(..., description="Password")
     # "public" is the server's default tenant; see UserRegistration.namespace.
     namespace: str = Field("public", description="User namespace")
+    recaptcha_response: Optional[str] = Field(
+        default=None, description="Google reCAPTCHA response token"
+    )
 
     @classmethod
     def from_username(
-        cls, username: str, password: str, namespace: str = "public"
+        cls,
+        username: str,
+        password: str,
+        namespace: str = "public",
+        recaptcha_response: Optional[str] = None,
     ) -> "LoginCredentials":
         """Create from username parameter (for backward compatibility)."""
-        return cls(identity=username, password=password, namespace=namespace)
+        return cls(
+            identity=username,
+            password=password,
+            namespace=namespace,
+            recaptcha_response=recaptcha_response,
+        )
 
 
 class GroupCheck(BaseModel):

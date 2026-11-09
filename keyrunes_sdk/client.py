@@ -280,7 +280,11 @@ class KeyrunesClient:
         )
 
     def login(
-        self, username: str, password: str, namespace: str = "public"
+        self,
+        username: str,
+        password: str,
+        namespace: str = "public",
+        recaptcha_response: Optional[str] = None,
     ) -> Token:
         """
         Authenticate user and obtain access token.
@@ -304,12 +308,15 @@ class KeyrunesClient:
             >>> client.set_token(token.access_token)
         """
         credentials = LoginCredentials(
-            identity=username, password=password, namespace=namespace
+            identity=username,
+            password=password,
+            namespace=namespace,
+            recaptcha_response=recaptcha_response,
         )
         response = self._make_request(
             "POST",
             "/api/login",
-            data=credentials.model_dump(),
+            data=credentials.model_dump(exclude_none=True),
             use_auth=False,
         )
 
@@ -353,6 +360,7 @@ class KeyrunesClient:
         password: str,
         namespace: str = "public",
         group: Optional[str] = None,
+        recaptcha_response: Optional[str] = None,
         **attributes: Any,
     ) -> User:
         """
@@ -389,8 +397,9 @@ class KeyrunesClient:
             password=password,
             namespace=namespace,
             attributes=attributes,
+            recaptcha_response=recaptcha_response,
         )
-        data = registration.model_dump()
+        data = registration.model_dump(exclude_none=True)
         if group is not None:
             data["group"] = group
 
@@ -460,7 +469,7 @@ class KeyrunesClient:
         response = self._make_request(
             "POST",
             ENDPOINT_REGISTER,
-            data=registration.model_dump(),
+            data=registration.model_dump(exclude_none=True),
             use_auth=False,
         )
 
