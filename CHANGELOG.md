@@ -11,84 +11,29 @@ the shape, edit `cliff.toml` and run `poetry run task changelog`.
 
 ### Added
 
-- **client**: add optional reCAPTCHA response to login and registration
+- add optional reCAPTCHA response to login and registration
 
   Forward an optional Google reCAPTCHA response token per request through a
   new ``recaptcha_response`` keyword on ``login`` and ``register_user``. The
   token is only serialized when provided, so existing callers are unaffected
   and no shared mutable state is introduced.
 
+### Documentation
+
+- cut the 0.5.1 release section with git-cliff
+
 
 ## [0.5.0] - 2026-11-04
 
-### Fixed
-
-- **security**: verify self group checks against the server and pin the privileged-group set (reported by Rathnadeepan / HotWater @HotWater-015)
-
-  has_group used to answer for the authenticated user straight from the
-  JWT claims the client decoded with verify_signature=False, so a forged
-  token granted any group locally. Self checks now hit GET /api/me with
-  the bearer token and fail closed. The is_admin heuristic that granted
-  admin to any group whose name merely contained 'admin' (e.g.
-  'non-admin') is replaced by exact membership in
-  {admin, admins, superadmin}. refresh_token now sends the Authorization
-  header the server's require_jwt middleware needs (it was 401 on every
-  call). Registration/login model defaults move from 'default' to the
-  server's actual default namespace 'public'. register_admin documents
-  that server >= 0.4.2 ignores admin_key at /api/register.
-
-- **security**: build the request URL from the base instead of joining it
-
-  urljoin() lets a second argument that looks like a URL replace the base
-  completely: an endpoint of "A:" produced the relative URL "A:" and an
-  endpoint of "https://elsewhere.test/x" would have sent the request (and
-  the Authorization header) to another host. The URL is now built from the
-  configured base and the endpoint path, so an endpoint can never point the
-  request somewhere else.
-
-  The fuzz suite caught it: hypothesis stores the failing example, so the
-  invariant "an arbitrary endpoint still yields an absolute URL" is now
-  pinned by a regression test.
-
-### Documentation
-
-- **client**: put the groups comment back in English
-
-  Every comment and docstring in this SDK is in English, and this one was not.
-  It went in today with the malformed-`groups` fix, in the same session where the
-  commit messages also drifted to Portuguese — same slip, different file.
-
-- **changelog**: put cliff.toml and its output in English
-
-  Everything else in this repository is in English — code, comments, docstrings,
-  and every commit message. The `cliff.toml` written earlier today was not: a
-  Portuguese header, Portuguese group names and Portuguese comments, which put
-  eight Portuguese lines into an otherwise English generated changelog.
-
-  Group names follow Keep a Changelog, which is what the hand-written file used
-  before it was generated: Added, Fixed, Performance, Refactored, Testing,
-  Documentation, Infrastructure, Maintenance, Other.
-
-  One thing changes besides the language: a `.*` catch-all parser. Without it a
-  commit that follows no convention is dropped without a trace, and a changelog
-  that looks complete while omitting work is the failure worth guarding against.
-
-- **client**: point the register_admin deprecation at the 0.5.0 release
-
-  The docstring still advertised 0.2.2, a version that never shipped the
-  deprecation. The method is deprecated since the release that carries the
-  server 0.4.2 hardening.
-
-- **changelog**: cut the 0.5.0 release section with git-cliff
-
-  Regenerated from the conventional commits of the 0.5.0 release.
-
-
-## [0.4.0] - 2026-09-15
-
 ### Added
 
-- **client**: change_password, which the API served and the SDK did not expose
+- carry the full server identity and add refresh; release 0.3.0
+
+  Migrating a real consumer (an LMS keying its user rows off the JWT `sub`)
+  surfaced four contract bugs against a live Keyrunes server and three fields
+  the SDK was discarding.
+
+- change_password, which the API served and the SDK did not expose
 
   `POST /api/user/change-password` has been in Keyrunes all along. The SDK exposed
   `login`, `refresh_token`, `register_user` and the group queries — and not this
@@ -128,7 +73,20 @@ the shape, edit `cliff.toml` and run `poetry run task changelog`.
 
 ### Fixed
 
-- **client**: contain a malformed `groups` instead of taking the client down
+- move mutmut out of the runtime dependencies; release 0.3.1
+
+  mutmut was declared in [tool.poetry.dependencies] rather than the dev group,
+  so installing this SDK pulled a mutation-testing tool and its whole tree
+  (libcst, textual, rich, setproctitle, pyyaml-ft, markdown-it-py,
+  mdit-py-plugins, mdurl, linkify-it-py, sortedcontainers) into every consumer,
+  production images included.
+
+  Nothing in keyrunes_sdk imports it, so upgrading only removes packages. The
+  wheel now declares httpx, pydantic[email] and pyjwt and nothing else.
+
+  Affected 0.2.0 and 0.3.0.
+
+- contain a malformed `groups` instead of taking the client down
 
   The repository's own fuzz suite found it: with `{"groups": true}` in the server
   response, normalization raised
@@ -145,7 +103,7 @@ the shape, edit `cliff.toml` and run `poetry run task changelog`.
   Pre-existing — `git stash` and the failure stays. Detection measured: putting
   the `or []` back fails the fuzz test.
 
-- **deps**: pyjwt 2.10.1 → 2.14.0 and idna 3.11 → 3.19 (OSV advisories)
+- pyjwt 2.10.1 → 2.14.0 and idna 3.11 → 3.19 (OSV advisories)
 
   The `safety` hook does not run on this machine — it asks for an interactive
   login and dies with `EOF when reading a line`. Rather than skip the security
@@ -170,9 +128,36 @@ the shape, edit `cliff.toml` and run `poetry run task changelog`.
   They are left alone: they are development-only, they do not ship in the
   published package, and resolving it means deciding whether `safety` stays.
 
+- verify self group checks against the server and pin the privileged-group set (reported by Rathnadeepan / HotWater @HotWater-015)
+
+  has_group used to answer for the authenticated user straight from the
+  JWT claims the client decoded with verify_signature=False, so a forged
+  token granted any group locally. Self checks now hit GET /api/me with
+  the bearer token and fail closed. The is_admin heuristic that granted
+  admin to any group whose name merely contained 'admin' (e.g.
+  'non-admin') is replaced by exact membership in
+  {admin, admins, superadmin}. refresh_token now sends the Authorization
+  header the server's require_jwt middleware needs (it was 401 on every
+  call). Registration/login model defaults move from 'default' to the
+  server's actual default namespace 'public'. register_admin documents
+  that server >= 0.4.2 ignores admin_key at /api/register.
+
+- build the request URL from the base instead of joining it
+
+  urljoin() lets a second argument that looks like a URL replace the base
+  completely: an endpoint of "A:" produced the relative URL "A:" and an
+  endpoint of "https://elsewhere.test/x" would have sent the request (and
+  the Authorization header) to another host. The URL is now built from the
+  configured base and the endpoint path, so an endpoint can never point the
+  request somewhere else.
+
+  The fuzz suite caught it: hypothesis stores the failing example, so the
+  invariant "an arbitrary endpoint still yields an absolute URL" is now
+  pinned by a regression test.
+
 ### Documentation
 
-- **changelog**: record under 0.4.0 the two commits that landed after the tag
+- record under 0.4.0 the two commits that landed after the tag
 
   The `v0.4.0` tag sat on `chore(release): 0.4.0`, and two commits went in after
   it: the malformed-`groups` fix and dropping `towncrier`. Since the tag was
@@ -180,7 +165,7 @@ the shape, edit `cliff.toml` and run `poetry run task changelog`.
   rather than forcing a 0.4.1 — and it should, because it is a `TypeError`
   escaping the SDK.
 
-- **changelog**: generate CHANGELOG.md with git-cliff, commit body included
+- generate CHANGELOG.md with git-cliff, commit body included
 
   The changelog in this repository was written by hand. The first attempt at
   switching to generation was measured and **thrown away**: with git-cliff's
@@ -226,9 +211,54 @@ the shape, edit `cliff.toml` and run `poetry run task changelog`.
   now; a changelog is a historical record, and rewording the message to hide that
   would cost rewriting already-published history.
 
+- put the groups comment back in English
+
+  Every comment and docstring in this SDK is in English, and this one was not.
+  It went in today with the malformed-`groups` fix, in the same session where the
+  commit messages also drifted to Portuguese — same slip, different file.
+
+- put cliff.toml and its output in English
+
+  Everything else in this repository is in English — code, comments, docstrings,
+  and every commit message. The `cliff.toml` written earlier today was not: a
+  Portuguese header, Portuguese group names and Portuguese comments, which put
+  eight Portuguese lines into an otherwise English generated changelog.
+
+  Group names follow Keep a Changelog, which is what the hand-written file used
+  before it was generated: Added, Fixed, Performance, Refactored, Testing,
+  Documentation, Infrastructure, Maintenance, Other.
+
+  One thing changes besides the language: a `.*` catch-all parser. Without it a
+  commit that follows no convention is dropped without a trace, and a changelog
+  that looks complete while omitting work is the failure worth guarding against.
+
+- point the register_admin deprecation at the 0.5.0 release
+
+  The docstring still advertised 0.2.2, a version that never shipped the
+  deprecation. The method is deprecated since the release that carries the
+  server 0.4.2 hardening.
+
+- cut the 0.5.0 release section with git-cliff
+
+  Regenerated from the conventional commits of the 0.5.0 release.
+
 ### Maintenance
 
-- **deps**: drop towncrier, declared and never configured
+- 0.4.0
+
+  Minor, not patch: `change_password` adds public surface without breaking
+  anything that existed, which is exactly what semver calls a minor.
+
+  What goes in is in `CHANGELOG.md` and `NEWS.rst`. The short version: the
+  Keyrunes API has always served `POST /api/user/change-password` and the SDK did
+  not expose it — whoever needed it built the HTTP call by hand, after someone
+  concluded from the SDK's surface alone that the operation did not exist.
+
+  `safety` was skipped: it fails asking for a login to the tool itself, and fails
+  the same way without this change (measured with `git stash`). The other hooks
+  pass, with 194 tests.
+
+- drop towncrier, declared and never configured
 
   `towncrier` had been a dev dependency from before, **without a
   `[tool.towncrier]` section** in `pyproject.toml`, without a `towncrier.toml` and
@@ -243,34 +273,11 @@ the shape, edit `cliff.toml` and run `poetry run task changelog`.
   A declared, unused dependency is the same family as dead code. The changelog in
   this repository is written by hand, and now `pyproject.toml` says so.
 
+- bump version to 0.5.0
 
-## [0.3.1] - 2026-09-04
-
-### Fixed
-
-- **deps**: move mutmut out of the runtime dependencies; release 0.3.1
-
-  mutmut was declared in [tool.poetry.dependencies] rather than the dev group,
-  so installing this SDK pulled a mutation-testing tool and its whole tree
-  (libcst, textual, rich, setproctitle, pyyaml-ft, markdown-it-py,
-  mdit-py-plugins, mdurl, linkify-it-py, sortedcontainers) into every consumer,
-  production images included.
-
-  Nothing in keyrunes_sdk imports it, so upgrading only removes packages. The
-  wheel now declares httpx, pydantic[email] and pyjwt and nothing else.
-
-  Affected 0.2.0 and 0.3.0.
-
-
-## [0.3.0] - 2026-09-03
-
-### Added
-
-- **client**: carry the full server identity and add refresh; release 0.3.0
-
-  Migrating a real consumer (an LMS keying its user rows off the JWT `sub`)
-  surfaced four contract bugs against a live Keyrunes server and three fields
-  the SDK was discarding.
+  Minor bump: the default namespace of the registration and login models
+  now matches the server default ("public") and the authorization helpers
+  answer from the server instead of the unsigned token claims.
 
 
 ## [0.2.0] - 2026-09-03
